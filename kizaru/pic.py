@@ -192,7 +192,18 @@ SIMPLE_CHARS = np.array([item[0] for item in FLAT])
 SIMPLE_COLORS = np.array([item[1] for item in FLAT], dtype=np.float32)
 LINE_CHARS = np.array([item[0] for item in STICKERS])
 LINE_PATTERNS = np.array([item[2] for item in STICKERS], dtype=np.float32)
+LINE_COLORS = np.array([item[1] for item in STICKERS], dtype=np.float32)
 COLORS = SIMPLE_COLORS
+PATCH = 16
+
+
+def _sticker_quads(colors, patterns):
+    mean = np.clip(patterns.mean(axis=1, keepdims=True), 0.05, None)
+    scale = np.clip(patterns / mean, 0.0, 2.5)[:, :, None]
+    return np.clip(colors[:, None, :] * scale, 0.0, 255.0)
+
+
+LINE_QUADS = _sticker_quads(LINE_COLORS, LINE_PATTERNS)
 
 
 def load_rgb(source):
@@ -244,10 +255,6 @@ def _edges(gray):
     return np.clip(magnitude / scale, 0.0, 1.0)
 
 
-def _overlay(base, top):
-    return np.where(base < 0.5, 2.0 * base * top, 1.0 - 2.0 * (1.0 - base) * (1.0 - top))
-
-
 def _limit_side(rgb, side=480):
     height, width = rgb.shape[:2]
     scale = side / max(height, width)
@@ -274,9 +281,27 @@ def _nearest_colors(blocks):
     return np.argmin(np.sum(diff * diff, axis=-1), axis=-1)
 
 
-def _nearest_patterns(patterns):
-    diff = patterns[:, :, None, :] - LINE_PATTERNS[None, None, :, :]
-    return np.argmin(np.sum(diff * diff, axis=-1), axis=-1)
+def _nearest_quads(blocks):
+    diff = blocks[:, :, None, :, :] - LINE_QUADS[None, None, :, :, :]
+    return np.argmin(np.sum(diff * diff, axis=(-1, -2)), axis=2)
+
+
+def _mix_line_color(rgb):
+    gray = _luminance(rgb)
+    gray_rgb = np.repeat((gray * 255.0)[:, :, None], 3, axis=2)
+    tinted = 0.5 * rgb + 0.5 * gray_rgb
+    ink = (1.0 - _edges(gray))[:, :, None]
+    return np.clip(tinted * (0.25 + 0.75 * ink), 0.0, 255.0)
+
+
+def quads_from_patch(block):
+    if block.ndim == 2:
+        block = np.repeat(block[:, :, None], 3, axis=2)
+    patch = int(block.shape[0])
+    half = patch // 2
+    view = block[:patch, :patch].reshape(2, half, 2, half, block.shape[2])
+    means = view.mean(axis=(1, 3))
+    return np.stack([means[0, 0], means[0, 1], means[1, 0], means[1, 1]], axis=0)
 
 
 def _paint(indexes, chars):
@@ -294,26 +319,18 @@ def simple_indexes(rgb, cells=32):
     return _nearest_colors(blocks)
 
 
-def line_indexes(rgb, cells=32):
-    work = _limit_side(rgb)
-    cols, rows = _grid(work.shape[1], work.shape[0], cells, square=True)
-    gray = _luminance(work)
-    line = 1.0 - _edges(gray)
-    side = cols * 2
-    gray_sq = _resize(gray, (side, side), Image.Resampling.BOX)
-    line_sq = _resize(line, (side, side), Image.Resampling.BILINEAR)
-    merged = np.clip(_overlay(gray_sq, line_sq), 0.0, 1.0)
-    tiles = merged.reshape(rows, 2, cols, 2)
-    patterns = np.stack(
-        [
-            tiles[:, 0, :, 0],
-            tiles[:, 0, :, 1],
-            tiles[:, 1, :, 0],
-            tiles[:, 1, :, 1],
-        ],
-        axis=-1,
+def line_indexes(rgb, cells=32, patch=PATCH):
+    cols, rows = _grid(rgb.shape[1], rgb.shape[0], cells, square=False)
+    prepared = _mix_line_color(_limit_side(rgb, side=max(cols, rows) * patch))
+    sampled = _resize(prepared, (cols * patch, rows * patch), Image.Resampling.BOX)
+    half = patch // 2
+    view = sampled.reshape(rows, 2, half, cols, 2, half, 3)
+    means = view.mean(axis=(2, 5))
+    blocks = np.stack(
+        [means[:, 0, :, 0], means[:, 0, :, 1], means[:, 1, :, 0], means[:, 1, :, 1]],
+        axis=2,
     )
-    return _nearest_patterns(patterns)
+    return _nearest_quads(blocks)
 
 
 def render_pic(source, mode="simple", cells=32):

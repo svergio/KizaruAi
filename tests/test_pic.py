@@ -6,9 +6,11 @@ from PIL import Image
 from kizaru.pic import (
     COLORS,
     HEADER,
+    LINE_COLORS,
     STICKERS,
     discord_chunks,
     line_indexes,
+    quads_from_patch,
     render_pic,
     resolve_mode,
     simple_indexes,
@@ -44,14 +46,31 @@ class PicTests(unittest.TestCase):
         self.assertEqual(indexes.shape, (8, 8))
         self.assertLess(float(COLORS[indexes[0, 0]].mean()), float(COLORS[indexes[0, -1]].mean()))
 
-    def test_line_mode_is_square_and_keeps_edges(self):
+    def test_patch_downsamples_to_four_pixels(self):
+        block = np.zeros((16, 16, 3), dtype=np.float32)
+        block[:, 8:] = (255, 255, 255)
+        quads = quads_from_patch(block)
+        self.assertEqual(quads.shape, (4, 3))
+        self.assertLess(float(quads[0].mean()), 20)
+        self.assertGreater(float(quads[1].mean()), 230)
+        self.assertLess(float(quads[2].mean()), 20)
+        self.assertGreater(float(quads[3].mean()), 230)
+
+    def test_line_mode_uses_color_and_patch(self):
         rgb = _solid((250, 250, 250), size=80)
         rgb[:, :40] = (5, 5, 5)
-        indexes = line_indexes(rgb, cells=16)
-        self.assertEqual(indexes.shape, (16, 16))
-        text = render_pic(rgb, mode="1", cells=16)
+        indexes = line_indexes(rgb, cells=8, patch=16)
+        self.assertEqual(indexes.shape, (8, 8))
+        self.assertLess(
+            float(LINE_COLORS[indexes[:, 0]].mean()),
+            float(LINE_COLORS[indexes[:, -1]].mean()),
+        )
+        red = line_indexes(_solid((220, 30, 30), size=64), cells=8, patch=16)
+        picked = LINE_COLORS[red[0, 0]]
+        self.assertGreater(float(picked[0]), float(picked[1]))
+        self.assertGreater(float(picked[0]), float(picked[2]))
+        text = render_pic(rgb, mode="1", cells=8)
         self.assertTrue(text.startswith(HEADER))
-        self.assertGreater(len(text.split("\n")), 10)
 
     def test_modes(self):
         self.assertEqual(resolve_mode("1"), "line")
