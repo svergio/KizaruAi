@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from kizaru.checkpoint import get_device, load_model
 from kizaru.mood import load_mood, mood_source, predict_mood
+from kizaru.pic import discord_chunks, render_pic, resolve_mode
 from kizaru.sample import evaluate
 
 DISCORD_LIMIT = 1800
@@ -22,6 +23,33 @@ async def replied_content(ctx):
         except (discord.NotFound, discord.HTTPException):
             return ""
     return message.content or ""
+
+
+async def image_bytes(message):
+    for attachment in message.attachments:
+        name = attachment.filename.lower()
+        content_type = attachment.content_type or ""
+        if content_type.startswith("image/") or name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+            return await attachment.read()
+    return None
+
+
+async def pic_bytes(ctx):
+    data = await image_bytes(ctx.message)
+    if data:
+        return data
+    reference = ctx.message.reference
+    if reference is None or reference.message_id is None:
+        return None
+    message = reference.resolved
+    if message is None:
+        try:
+            message = await ctx.channel.fetch_message(reference.message_id)
+        except (discord.NotFound, discord.HTTPException):
+            return None
+    if message is None:
+        return None
+    return await image_bytes(message)
 
 
 def build_bot(model, char_to_idx, idx_to_char, device, mood=None, prefix="Ai"):
@@ -66,6 +94,25 @@ def build_bot(model, char_to_idx, idx_to_char, device, mood=None, prefix="Ai"):
         if len(snippet) > 140:
             snippet = snippet[:140] + "..."
         await ctx.send(f"Настроение: {label} ({score:.0%})\n{snippet}"[:DISCORD_LIMIT])
+
+    @bot.command(name="pic")
+    async def pic(ctx, mode: str = "simple", cells: int = 24):
+        if mode.isdigit():
+            cells = int(mode)
+            mode = "simple"
+        try:
+            mode_name = resolve_mode(mode)
+        except ValueError:
+            await ctx.send("Режим: AiPic 1 для лайна или AiPic 2 для простого среднего цвета.")
+            return
+        data = await pic_bytes(ctx)
+        if not data:
+            await ctx.send("Кинь картинку или ответь на сообщение с картинкой.")
+            return
+        cells = max(8, min(int(cells), 40))
+        text = render_pic(data, mode=mode_name, cells=cells)
+        for chunk in discord_chunks(text):
+            await ctx.send(chunk[:DISCORD_LIMIT])
 
     return bot
 
