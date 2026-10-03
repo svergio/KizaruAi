@@ -85,7 +85,6 @@ EXTRA_TRAIN = {
     "я не огонь": False,
     "не круто": False,
     "не весело": False,
-    "вовсе не грустно": True,
     "вовсе не плохо": True,
     "мне плохо": False,
     "очень плохо": False,
@@ -94,6 +93,51 @@ EXTRA_TRAIN = {
     "а хуево": False,
     "я устал": False,
     "достало": False,
+    "кайфово сегодня": True,
+    "мне сегодня хорошо": True,
+    "спасибо тебе": True,
+    "ты лучший": True,
+    "я рад": True,
+    "хорошее настроение": True,
+    "вовсе не грустно": True,
+    "совсем не хуево": True,
+    "это не ужас": True,
+    "я не злюсь": True,
+    "не грустный": True,
+    "ты не хороший": False,
+    "он не хороший": False,
+    "вовсе не хорошо": False,
+    "это не хорошо": False,
+    "не веселый": False,
+    "я не рад": False,
+    "очень грустно": False,
+    "плохой день": False,
+    "кошмар": False,
+    "ненавижу это": False,
+    "бесит меня": False,
+    "вообще не классно": False,
+    "совсем не огонь": False,
+    "отлично": True,
+    "мне сегодня классно": True,
+    "сегодня хорошо": True,
+    "огромное спасибо": True,
+    "очень большое спасибо": True,
+    "ты выглядишь хорошо": True,
+    "не плохо выглядишь": True,
+    "я не веселый": False,
+    "сейчас не весело": False,
+    "сегодня плохо": False,
+}
+
+HOLDOUT = {
+    "мне сегодня отлично": True,
+    "спасибо большое": True,
+    "вообще не круто": False,
+    "какой кошмар": False,
+    "ты не хуево выглядишь": True,
+    "я не веселый сегодня": False,
+    "это вовсе не ужас": True,
+    "совсем не кайф": False,
 }
 
 UNK = "<unk>"
@@ -130,12 +174,13 @@ def encode(text, vocab):
 
 
 class MoodRNN(nn.Module):
-    def __init__(self, vocab_size, embed_size=32, hidden_size=64):
+    def __init__(self, vocab_size, embed_size=32, hidden_size=64, n_layers=2):
         super().__init__()
         self.embed_size = embed_size
         self.hidden_size = hidden_size
+        self.n_layers = n_layers
         self.embed = nn.Embedding(vocab_size, embed_size)
-        self.rnn = nn.LSTM(embed_size, hidden_size, batch_first=True)
+        self.rnn = nn.LSTM(embed_size, hidden_size, num_layers=n_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, 2)
 
     def forward(self, token_ids):
@@ -144,7 +189,7 @@ class MoodRNN(nn.Module):
         return self.fc(output[:, -1, :])
 
 
-def fit_mood(epochs=400, lr=1e-2, seed=1):
+def fit_mood(epochs=300, lr=3e-3, seed=1):
     random.seed(seed)
     torch.manual_seed(seed)
     phrases = train_phrases()
@@ -216,6 +261,7 @@ def save_mood(path, model, vocab, **meta):
             "vocab": vocab,
             "embed_size": model.embed_size,
             "hidden_size": model.hidden_size,
+            "n_layers": model.n_layers,
             **meta,
         },
         path,
@@ -233,13 +279,18 @@ def load_mood(path, device=None):
         raise FileNotFoundError(f"Mood model file not found: {path}")
     payload = torch.load(path, map_location=device, weights_only=False)
     vocab = payload["vocab"]
-    model = MoodRNN(len(vocab), payload["embed_size"], payload["hidden_size"])
+    model = MoodRNN(
+        len(vocab),
+        payload["embed_size"],
+        payload["hidden_size"],
+        n_layers=payload.get("n_layers", 2),
+    )
     model.load_state_dict(payload["state_dict"])
     model.to(device)
     model.eval()
     meta = {
         key: value
         for key, value in payload.items()
-        if key not in {"state_dict", "vocab", "embed_size", "hidden_size"}
+        if key not in {"state_dict", "vocab", "embed_size", "hidden_size", "n_layers"}
     }
     return model, vocab, meta

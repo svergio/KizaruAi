@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from kizaru.mood import (
+    HOLDOUT,
     NOTEBOOK_TEST,
     accuracy,
     fit_mood,
@@ -18,10 +19,14 @@ from bot import replied_content
 class MoodTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.model, cls.vocab = fit_mood(epochs=400, seed=1)
+        cls.model, cls.vocab = fit_mood(epochs=300, seed=1)
 
     def test_notebook_holdout(self):
         score = accuracy(self.model, self.vocab, NOTEBOOK_TEST)
+        self.assertEqual(score, 1.0)
+
+    def test_unseen_phrases(self):
+        score = accuracy(self.model, self.vocab, HOLDOUT)
         self.assertEqual(score, 1.0)
 
     def test_reply_beats_inline_text(self):

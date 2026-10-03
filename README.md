@@ -17,7 +17,7 @@
 ```bash
 python -m pip install -r requirements.txt
 python prepare_data.py
-python train.py --out checkpoints/kizaru.pt --epochs 2000
+python train.py --out checkpoints/kizaru.pt --epochs 3000
 python train_mood.py --out checkpoints/mood.pt
 python generate.py checkpoints/kizaru.pt --start "Я" --lines 4
 ```

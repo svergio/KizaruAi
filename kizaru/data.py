@@ -12,6 +12,34 @@ DEFAULT_CORPUS = Path("data/kizaru_lyrics.txt")
 LEGACY_MESSAGES = Path("legacy/messages.csv")
 
 
+def clean_lyrics(text):
+    for junk in ("\u2005", "\u200a", "\u205f", "\xa0", "\u200b"):
+        text = text.replace(junk, " " if junk != "\u200b" else "")
+    text = text.replace("’", "'").replace("`", "'").replace("…", "...")
+    text = text.replace("“", '"').replace("”", '"').replace("„", '"').replace("«", '"').replace("»", '"')
+    lines = []
+    blank = False
+    for raw in text.splitlines():
+        line = " ".join(raw.split())
+        if not line:
+            if lines and not blank:
+                lines.append("")
+            blank = True
+            continue
+        blank = False
+        lines.append(line)
+    cleaned = "\n".join(lines).strip()
+    counts = Counter(cleaned)
+    rare = {
+        char for char, count in counts.items()
+        if count < 4 and not char.isalnum() and char not in " \n.,!?'-"
+    }
+    if rare:
+        cleaned = "".join(" " if char in rare else char for char in cleaned)
+        cleaned = "\n".join(" ".join(line.split()) for line in cleaned.splitlines())
+    return cleaned.strip() + "\n"
+
+
 def load_corpus(path=None):
     if path is None:
         if DEFAULT_CORPUS.exists():
@@ -23,7 +51,7 @@ def load_corpus(path=None):
     path = Path(path)
     if path.suffix.lower() == ".csv":
         return _load_messages_csv(path)
-    text = path.read_text(encoding="utf-8")
+    text = clean_lyrics(path.read_text(encoding="utf-8"))
     if not text.strip():
         raise ValueError(f"Corpus is empty: {path}")
     return text
