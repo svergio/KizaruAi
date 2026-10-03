@@ -1,0 +1,10 @@
+.idea/
+.venv/
+__pycache__/
+*.pyc
+.env
+data/kizaru_lyrics.txt
+data/huggingartists_kizaru.json
+checkpoints/*.pt
+*.egg-info/
+.ipynb_checkpoints/
