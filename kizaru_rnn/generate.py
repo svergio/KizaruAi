@@ -20,6 +20,7 @@ def evaluate(
     prediction_len=200,
     temp=0.3,
     device=None,
+    max_lines=None,
 ):
     if device is None:
         device = next(model.parameters()).device
@@ -28,6 +29,7 @@ def evaluate(
     idx_input = _encode_start(start_text, char_to_idx)
     train = torch.LongTensor(idx_input).view(-1, 1, 1).to(device)
     predicted_text = "".join(idx_to_char[idx] for idx in idx_input)
+    start_lines = predicted_text.count("\n")
 
     with torch.no_grad():
         _, hidden = model(train, hidden)
@@ -39,4 +41,6 @@ def evaluate(
             top_index = int(np.random.choice(len(char_to_idx), p=p_next))
             inp = torch.LongTensor([top_index]).view(-1, 1, 1).to(device)
             predicted_text += idx_to_char[top_index]
-    return predicted_text
+            if max_lines is not None and predicted_text.count("\n") - start_lines >= max_lines:
+                break
+    return predicted_text.rstrip()

@@ -20,7 +20,7 @@ Char-level LSTM, который дописывает следующую стро
 python -m pip install -r requirements.txt
 python prepare_data.py
 python train.py --epochs 2000 --checkpoint checkpoints/kizaru.pt
-python generate.py --start "Я" --length 400 --temp 0.4
+python generate.py --start "Я" --lines 4 --temp 0.4
 ```
 
 На стриме стояло 50 000 эпох, `SEQ_LEN=256`, batch 16, Adam `lr=1e-2`, `amsgrad=True`. Для проверки хватает пары тысяч шагов на CPU.

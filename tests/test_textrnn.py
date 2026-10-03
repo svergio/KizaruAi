@@ -55,6 +55,17 @@ class TextRNNTests(unittest.TestCase):
         self.assertTrue(text.startswith("Я"))
         self.assertEqual(len(text), 21)
 
+        lined = evaluate(
+            model,
+            char_to_idx,
+            idx_to_char,
+            start_text="Я",
+            prediction_len=80,
+            temp=0.8,
+            max_lines=2,
+        )
+        self.assertLessEqual(lined.count("\n"), 2)
+
     def test_legacy_messages_loadable(self):
         path = Path("legacy/messages.csv")
         self.assertTrue(path.exists())

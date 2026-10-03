@@ -45,6 +45,7 @@ def build_bot(model, char_to_idx, idx_to_char, device):
             prediction_len=280,
             temp=0.4,
             device=device,
+            max_lines=6,
         )
         if len(text) > 1800:
             text = text[:1800]

@@ -11,6 +11,7 @@ def parse_args():
     parser.add_argument("--length", type=int, default=400)
     parser.add_argument("--temp", type=float, default=0.3)
     parser.add_argument("--samples", type=int, default=1)
+    parser.add_argument("--lines", type=int, default=4, help="Stop after this many new lines")
     return parser.parse_args()
 
 
@@ -31,6 +32,7 @@ def main():
             prediction_len=args.length,
             temp=args.temp,
             device=device,
+            max_lines=args.lines or None,
         )
         print(text)
         if i + 1 < args.samples:
