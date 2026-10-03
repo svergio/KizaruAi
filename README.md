@@ -1,41 +1,36 @@
 # KizaruAi
 
-Char-level LSTM, который дописывает следующую строку в стиле Кизару.
+Char-level LSTM со стрима 2021. Обучение пишет файл модели, бот этот файл только читает.
 
-В 2021 это был стрим «Пишем нейронку»: свой `TextRNN` на PyTorch, корпус реп-текстов, предсказание следующего символа. В git тогда попал другой черновик — Discord-бот и классификатор настроения. Этот репозиторий восстанавливает генератор со стрима и собирает его в рабочий проект.
+`notebooks/` — ноутбуки, на которых учился предсказывать. Их не трогать как учебный след.
 
-## Что здесь
+## Ноутбуки
 
-- `kizaru_rnn/` — модель со стрима: Embedding + LSTM(2x128) + Linear
-- `prepare_data.py` — скачивает тексты `huggingartists/kizaru`, иначе берёт старый `legacy/messages.csv`
-- `train.py` / `generate.py` — обучение и сэмплинг следующей строки
-- `bot.py` — команда `AiTalk` / `!talk`
-- `legacy/` — исходные файлы 2022 года без секретов
+- `notebooks/определенее настроение).ipynb` — первый numpy-RNN, бинарное настроение
+- `notebooks/text_rnn.ipynb` — char-LSTM, следующая строка, в конце `torch.save` в `.pt`
 
-Тексты песен чужие. Скрипт качает их локально и не кладёт в git. Только для личного эксперимента.
-
-## Запуск
+## Модель файлом
 
 ```bash
 python -m pip install -r requirements.txt
 python prepare_data.py
-python train.py --epochs 2000 --checkpoint checkpoints/kizaru.pt
-python generate.py --start "Я" --lines 4 --temp 0.4
+python train.py --out checkpoints/kizaru.pt --epochs 2000
+python generate.py checkpoints/kizaru.pt --start "Я" --lines 4
 ```
 
-На стриме стояло 50 000 эпох, `SEQ_LEN=256`, batch 16, Adam `lr=1e-2`, `amsgrad=True`. Для проверки хватает пары тысяч шагов на CPU.
-
-Бот:
+`train.py` делает `torch.save(...)` в один `.pt`: веса, словарь символов, размер LSTM. Этот файл можно отдать боту как есть.
 
 ```bash
 export DISCORD_TOKEN=...
-python bot.py
+python bot.py checkpoints/kizaru.pt
 ```
 
-Потом в Discord: `AiTalk Ночью` или `!talk cousin`.
+В Discord: `AiTalk Ночью` или `!talk cousin`.
 
 ## Тесты
 
 ```bash
 python -m unittest tests/test_textrnn.py
 ```
+
+Тексты песен качаются локально и в git не попадают. `legacy/messages.csv` — старый форумный корпус, если Hugging Face недоступен.

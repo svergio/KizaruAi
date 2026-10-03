@@ -1,57 +1,19 @@
 import argparse
-from pathlib import Path
 
 import numpy as np
 import torch
 from torch import nn
 
-from kizaru_rnn.data import BATCH_SIZE, SEQ_LEN, get_batch, load_corpus, text_to_seq
-from kizaru_rnn.generate import evaluate
-from kizaru_rnn.model import TextRNN
-
-
-def get_device():
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
-
-
-def save_checkpoint(path, model, char_to_idx, idx_to_char, extra=None):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "model_state": model.state_dict(),
-        "char_to_idx": char_to_idx,
-        "idx_to_char": {int(k): v for k, v in idx_to_char.items()},
-        "hidden_size": model.hidden_size,
-        "embedding_size": model.embedding_size,
-        "n_layers": model.n_layers,
-    }
-    if extra:
-        payload.update(extra)
-    torch.save(payload, path)
-
-
-def load_checkpoint(path, device=None):
-    if device is None:
-        device = get_device()
-    payload = torch.load(path, map_location=device, weights_only=False)
-    idx_to_char = {int(k): v for k, v in payload["idx_to_char"].items()}
-    char_to_idx = payload["char_to_idx"]
-    model = TextRNN(
-        input_size=len(idx_to_char),
-        hidden_size=payload["hidden_size"],
-        embedding_size=payload["embedding_size"],
-        n_layers=payload["n_layers"],
-    )
-    model.load_state_dict(payload["model_state"])
-    model.to(device)
-    return model, char_to_idx, idx_to_char, payload
+from kizaru.checkpoint import get_device, save_model
+from kizaru.data import BATCH_SIZE, SEQ_LEN, get_batch, load_corpus, text_to_seq
+from kizaru.model import TextRNN
+from kizaru.sample import evaluate
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train char-level LSTM on Kizaru lyrics")
-    parser.add_argument("--corpus", default=None, help="Path to lyrics .txt or messages .csv")
+    parser = argparse.ArgumentParser(description="Train TextRNN and export a .pt file")
+    parser.add_argument("--corpus", default=None)
+    parser.add_argument("--out", default="checkpoints/kizaru.pt")
     parser.add_argument("--epochs", type=int, default=2000)
     parser.add_argument("--seq-len", type=int, default=SEQ_LEN)
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
@@ -63,7 +25,6 @@ def parse_args():
     parser.add_argument("--gen-len", type=int, default=400)
     parser.add_argument("--temp", type=float, default=0.3)
     parser.add_argument("--start", default="Я")
-    parser.add_argument("--checkpoint", default="checkpoints/kizaru.pt")
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -87,11 +48,7 @@ def main():
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad=True)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        patience=5,
-        factor=0.5,
-    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
 
     loss_avg = []
     best_loss = float("inf")
@@ -116,7 +73,7 @@ def main():
             print(f"Loss: {mean_loss:.6f}")
             scheduler.step(mean_loss)
             loss_avg = []
-            predicted_text = evaluate(
+            print(evaluate(
                 model,
                 char_to_idx,
                 idx_to_char,
@@ -124,23 +81,30 @@ def main():
                 prediction_len=args.gen_len,
                 temp=args.temp,
                 device=device,
-            )
-            print(predicted_text)
+                max_lines=6,
+            ))
             print("-" * 40)
-            extra = {"epoch": epoch + 1, "mean_loss": mean_loss}
             if mean_loss < best_loss:
                 best_loss = mean_loss
-                save_checkpoint(args.checkpoint, model, char_to_idx, idx_to_char, extra)
-                print(f"saved {args.checkpoint}")
+                save_model(
+                    args.out,
+                    model,
+                    char_to_idx,
+                    idx_to_char,
+                    epoch=epoch + 1,
+                    mean_loss=mean_loss,
+                )
+                print(f"saved {args.out}")
 
-    save_checkpoint(
-        args.checkpoint,
+    save_model(
+        args.out,
         model,
         char_to_idx,
         idx_to_char,
-        {"epoch": args.epochs, "mean_loss": best_loss},
+        epoch=args.epochs,
+        mean_loss=best_loss,
     )
-    print(f"done, checkpoint={args.checkpoint} best_loss={best_loss:.6f}")
+    print(f"done, model={args.out} best_loss={best_loss:.6f}")
 
 
 if __name__ == "__main__":

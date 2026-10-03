@@ -1,41 +1,29 @@
+import argparse
 import os
-from pathlib import Path
 
-from train import get_device, load_checkpoint
-from kizaru_rnn.generate import evaluate
+import discord
+from discord.ext import commands
 
-try:
-    import discord
-    from discord.ext import commands
-except ImportError as exc:
-    raise SystemExit("Install discord.py: pip install -r requirements.txt") from exc
+from kizaru.checkpoint import get_device, load_model
+from kizaru.sample import evaluate
+
+DISCORD_LIMIT = 1800
 
 
-DEFAULT_CHECKPOINT = Path("checkpoints/kizaru.pt")
-
-
-def load_model():
-    checkpoint = Path(os.environ.get("KIZARU_CHECKPOINT", DEFAULT_CHECKPOINT))
-    if not checkpoint.exists():
-        raise SystemExit(
-            f"Checkpoint not found: {checkpoint}. Train first: python train.py"
-        )
-    device = get_device()
-    model, char_to_idx, idx_to_char, payload = load_checkpoint(checkpoint, device=device)
-    print(f"loaded {checkpoint} vocab={len(char_to_idx)} loss={payload.get('mean_loss')}")
-    return model, char_to_idx, idx_to_char, device
-
-
-def build_bot(model, char_to_idx, idx_to_char, device):
+def build_bot(model, char_to_idx, idx_to_char, device, prefix="Ai"):
     intents = discord.Intents.default()
     intents.message_content = True
-    bot = commands.Bot(command_prefix=("Ai", "ai", "!"), intents=intents)
+    bot = commands.Bot(
+        command_prefix=(prefix, prefix.lower(), "!"),
+        intents=intents,
+        case_insensitive=True,
+    )
 
     @bot.event
     async def on_ready():
         print(f"Bot is ready as {bot.user}")
 
-    @bot.command(name="talk", aliases=("Talk",))
+    @bot.command(name="talk")
     async def talk(ctx, *, start: str = "Я"):
         text = evaluate(
             model,
@@ -47,23 +35,28 @@ def build_bot(model, char_to_idx, idx_to_char, device):
             device=device,
             max_lines=6,
         )
-        if len(text) > 1800:
-            text = text[:1800]
-        await ctx.send(text)
-
-    @bot.command(name="helpme")
-    async def helpme(ctx):
-        await ctx.send("Напиши `AiTalk <строка>` или `!talk <строка>` — модель допишет дальше.")
+        await ctx.send(text[:DISCORD_LIMIT])
 
     return bot
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Discord bot that loads an exported TextRNN")
+    parser.add_argument("model", help="Path to the trained .pt file")
+    parser.add_argument("--token", default=os.environ.get("DISCORD_TOKEN", ""))
+    parser.add_argument("--prefix", default="Ai")
+    return parser.parse_args()
+
+
 def main():
-    token = os.environ.get("DISCORD_TOKEN", "").strip()
+    args = parse_args()
+    device = get_device()
+    model, char_to_idx, idx_to_char, meta = load_model(args.model, device=device)
+    print(f"loaded {args.model} vocab={len(char_to_idx)} loss={meta.get('mean_loss')}")
+    token = args.token.strip()
     if not token:
-        raise SystemExit("Set DISCORD_TOKEN in the environment or .env")
-    model, char_to_idx, idx_to_char, device = load_model()
-    bot = build_bot(model, char_to_idx, idx_to_char, device)
+        raise SystemExit("Pass --token or set DISCORD_TOKEN")
+    bot = build_bot(model, char_to_idx, idx_to_char, device, prefix=args.prefix)
     bot.run(token)
 
 

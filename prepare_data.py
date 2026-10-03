@@ -7,18 +7,14 @@ from pathlib import Path
 
 DEFAULT_OUT = Path("data/kizaru_lyrics.txt")
 HF_JSON = "https://huggingface.co/datasets/huggingartists/kizaru/resolve/main/datasets.json"
-KSUSONIC_PARQUET = (
-    "https://huggingface.co/datasets/ksusonic/kizaru/resolve/main/"
-    "data/train-00000-of-00001.parquet"
-)
 LEGACY_CSV = Path("legacy/messages.csv")
 
 
 def download(url, dest):
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(url, headers={"User-Agent": "KizaruAi/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as response, dest.open("wb") as handle:
+    request = urllib.request.Request(url, headers={"User-Agent": "KizaruAi/1.0"})
+    with urllib.request.urlopen(request, timeout=60) as response, dest.open("wb") as handle:
         handle.write(response.read())
     return dest
 
@@ -34,7 +30,7 @@ def from_huggingartists(out_path):
     if not texts:
         raise ValueError("huggingartists/kizaru has no texts")
     out_path.write_text("\n\n".join(texts), encoding="utf-8")
-    return len(texts), sum(len(t) for t in texts)
+    return len(texts), sum(len(text) for text in texts)
 
 
 def from_legacy_csv(out_path):
@@ -49,17 +45,13 @@ def from_legacy_csv(out_path):
     if not parts:
         raise ValueError("legacy messages.csv is empty")
     out_path.write_text("\n\n".join(parts), encoding="utf-8")
-    return len(parts), sum(len(t) for t in parts)
+    return len(parts), sum(len(text) for text in parts)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Build a local lyrics corpus")
     parser.add_argument("--out", default=str(DEFAULT_OUT))
-    parser.add_argument(
-        "--source",
-        choices=("kizaru", "legacy", "auto"),
-        default="auto",
-    )
+    parser.add_argument("--source", choices=("kizaru", "legacy", "auto"), default="auto")
     return parser.parse_args()
 
 
@@ -67,7 +59,6 @@ def main():
     args = parse_args()
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-
     errors = []
     sources = ["kizaru", "legacy"] if args.source == "auto" else [args.source]
     for source in sources:
@@ -81,7 +72,6 @@ def main():
         except Exception as exc:
             errors.append(f"{source}: {exc}")
             print(f"{source} failed: {exc}", file=sys.stderr)
-
     raise SystemExit("Could not prepare corpus:\n" + "\n".join(errors))
 
 
