@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-TOKEN = 'OTQwNjA0MzExODk1OTQ5MzQy.YgJ0Bw.aUnjv1T2fWBDHvW9Vz2bujzQ-y8'
+TOKEN = ''  # revoked; do not commit Discord tokens
 bot = commands.Bot(command_prefix='Ai')
 
 
