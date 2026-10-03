@@ -93,7 +93,9 @@ class TextRNNTests(unittest.TestCase):
         _, char_to_idx, idx_to_char = text_to_seq(SAMPLE)
         model = TextRNN(len(idx_to_char), 8, 8, n_layers=1)
         bot = build_bot(model, char_to_idx, idx_to_char, torch.device("cpu"))
-        self.assertIn("talk", {command.name for command in bot.commands})
+        names = {command.name for command in bot.commands}
+        self.assertIn("talk", names)
+        self.assertIn("mood", names)
 
 
 if __name__ == "__main__":

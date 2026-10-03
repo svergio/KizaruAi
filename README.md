@@ -25,7 +25,17 @@ export DISCORD_TOKEN=...
 python bot.py checkpoints/kizaru.pt
 ```
 
-В Discord: `AiTalk Ночью` или `!talk cousin`.
+В Discord две команды:
+
+- `AiTalk Ночью` или `!talk cousin` — дописывает трек
+- реплай на сообщение и `AiMood` или `!mood` — настроение того сообщения
+
+Настроение — тот же бинарный RNN из ноутбука (`позитив` / `негатив`). Файл отдельно:
+
+```bash
+python train_mood.py --out checkpoints/mood.pt
+python bot.py checkpoints/kizaru.pt --mood checkpoints/mood.pt
+```
 
 ## Тесты
 
