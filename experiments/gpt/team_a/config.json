@@ -1,0 +1,27 @@
+﻿{
+  "team": "A",
+  "slot": "gpt_char",
+  "status": "done",
+  "wall_start": "2026-10-05T08:47:30.1126365+03:00",
+  "wall_minutes": 90,
+  "elapsed_minutes": 5.3,
+  "corpus": "experiments/shared/train.txt",
+  "out": "experiments/gpt/team_a/model.pt",
+  "active_run": 1,
+  "args": {
+    "arch": "gpt",
+    "level": "char",
+    "d_model": 128,
+    "n_layers": 4,
+    "n_heads": 4,
+    "block_size": 256,
+    "steps": 25000,
+    "lr": 0.0003,
+    "batch_size": 16,
+    "seed": 42
+  },
+  "why": "Anchor run: README defaults for gpt char.",
+  "best_train_loss": 1.568518,
+  "test_ce": 1.445534246232753,
+  "score_path": "experiments/gpt/team_a/score.json"
+}

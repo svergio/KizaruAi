@@ -1,0 +1,121 @@
+{
+  "team": "A",
+  "slot": "transformer_char",
+  "status": "done",
+  "wall_start": "2026-10-05T06:44:31+03:00",
+  "wall_minutes": 90,
+  "elapsed_minutes": 79.6,
+  "corpus": "experiments/shared/train.txt",
+  "out": "experiments/transformer/team_a/model.pt",
+  "best_run": 3,
+  "args": {
+    "arch": "transformer",
+    "level": "char",
+    "d_model": 384,
+    "n_layers": 8,
+    "n_heads": 8,
+    "block_size": 256,
+    "steps": 50000,
+    "lr": 0.00015,
+    "batch_size": 8,
+    "seed": 7
+  },
+  "best_train_loss": 1.222808,
+  "test_ce": 1.188683,
+  "score_path": "experiments/transformer/team_a/score.json",
+  "previous_runs": [
+    {
+      "run": 1,
+      "args": {
+        "d_model": 128,
+        "n_layers": 4,
+        "n_heads": 4,
+        "block_size": 256,
+        "steps": 25000,
+        "lr": 0.0003,
+        "batch_size": 16,
+        "seed": 42
+      },
+      "best_train_loss": 1.735493,
+      "test_ce": 1.615506,
+      "stopped_after_min": 4.6,
+      "checkpoint": "experiments/transformer/team_a/model_run1.pt",
+      "why_stop": "Anchor baseline; scale up capacity."
+    },
+    {
+      "run": 2,
+      "args": {
+        "d_model": 256,
+        "n_layers": 6,
+        "n_heads": 8,
+        "block_size": 256,
+        "steps": 80000,
+        "lr": 0.0002,
+        "batch_size": 12,
+        "seed": 42
+      },
+      "best_train_loss": 1.252895,
+      "test_ce": 1.197248,
+      "stopped_after_min": 33.5,
+      "checkpoint": "experiments/transformer/team_a/model_run2.pt",
+      "why_stop": "Strong CE; try wider/deeper 384x8."
+    },
+    {
+      "run": 3,
+      "args": {
+        "d_model": 384,
+        "n_layers": 8,
+        "n_heads": 8,
+        "block_size": 256,
+        "steps": 50000,
+        "lr": 0.00015,
+        "batch_size": 8,
+        "seed": 7
+      },
+      "best_train_loss": 1.222808,
+      "test_ce": 1.188683,
+      "cyrillic_ratio": 0.98,
+      "repeat_ratio": 0.0,
+      "stopped_after_min": 58.2,
+      "checkpoint": "experiments/transformer/team_a/model_run3.pt",
+      "why_stop": "Best CE of slot; kept as model.pt."
+    },
+    {
+      "run": 4,
+      "args": {
+        "d_model": 512,
+        "n_layers": 6,
+        "n_heads": 8,
+        "block_size": 256,
+        "steps": 35000,
+        "lr": 0.00012,
+        "batch_size": 4,
+        "seed": 11
+      },
+      "best_train_loss": 1.326373,
+      "test_ce": 1.27671,
+      "stopped_after_min": 69.2,
+      "checkpoint": "experiments/transformer/team_a/model_run4.pt",
+      "why_stop": "Worse CE than run3; discarded."
+    },
+    {
+      "run": 5,
+      "args": {
+        "d_model": 384,
+        "n_layers": 8,
+        "n_heads": 8,
+        "block_size": 256,
+        "steps": 40000,
+        "lr": 0.0001,
+        "batch_size": 8,
+        "seed": 42
+      },
+      "best_train_loss": null,
+      "test_ce": null,
+      "stopped_after_min": 79.6,
+      "checkpoint": null,
+      "why_stop": "Killed near wall; train loss still ~1.39 at 20k, no chance to beat run3."
+    }
+  ],
+  "notes": "Best run3: 384/8/8 block256 steps50k lr1.5e-4 batch8 seed7. CE=1.188683. No copy to checkpoints/transformer.pt."
+}

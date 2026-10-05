@@ -1,0 +1,84 @@
+{
+  "team": "B",
+  "slot": "lstm_char",
+  "status": "done",
+  "wall_start": "2026-10-05T02:11:54+03:00",
+  "wall_minutes": 90,
+  "elapsed_minutes": 88.2,
+  "corpus": "experiments/shared/train.txt",
+  "out": "experiments/lstm_char/team_b/model.pt",
+  "best_run": 3,
+  "args": {
+    "level": "char",
+    "hidden_size": 832,
+    "embedding_size": 832,
+    "n_layers": 2,
+    "epochs": 80000,
+    "seq_len": 512,
+    "bptt": 128,
+    "lr": 0.001,
+    "batch_size": 10,
+    "eval_every": 50,
+    "seed": 42
+  },
+  "best_train_loss": 1.371611,
+  "test_ce": 1.3772703324129139,
+  "score_path": "experiments/lstm_char/team_b/score.json",
+  "previous_runs": [
+    {
+      "run": 1,
+      "args": {
+        "hidden_size": 512,
+        "embedding_size": 512,
+        "n_layers": 3,
+        "epochs": 80000,
+        "seq_len": 384,
+        "bptt": 96,
+        "lr": 0.001,
+        "batch_size": 12
+      },
+      "best_train_loss": 1.390785,
+      "test_ce": 1.4038500785827637,
+      "stopped_after_min": 31.1,
+      "checkpoint": "experiments/lstm_char/team_b/model_run1.pt",
+      "why_stop": "Plateau ~1.39; escalate capacity."
+    },
+    {
+      "run": 2,
+      "args": {
+        "hidden_size": 768,
+        "embedding_size": 768,
+        "n_layers": 2,
+        "epochs": 80000,
+        "seq_len": 640,
+        "bptt": 160,
+        "lr": 0.0008,
+        "batch_size": 8
+      },
+      "best_train_loss": 1.383362,
+      "test_ce": 1.3930789232254028,
+      "stopped_after_min": 54.6,
+      "checkpoint": "experiments/lstm_char/team_b/model_run2.pt",
+      "why_stop": "Noisy 1.38-1.47; long ctx + small batch underperformed."
+    },
+    {
+      "run": 3,
+      "args": {
+        "hidden_size": 832,
+        "embedding_size": 832,
+        "n_layers": 2,
+        "epochs": 80000,
+        "seq_len": 512,
+        "bptt": 128,
+        "lr": 0.001,
+        "batch_size": 10
+      },
+      "best_train_loss": 1.371611,
+      "test_ce": 1.3772703324129139,
+      "stopped_after_min": 88.2,
+      "checkpoint": "experiments/lstm_char/team_b/model_run3.pt",
+      "why_stop": "Wall budget; best CE among B runs; kept as model.pt."
+    }
+  ],
+  "notes": "Winner run3 832/832x2 seq512. Bench ce=1.377270 repeat=0 cyr=1.0. Did not beat Team A ce=1.334966. Full shared train, no slice. No copy to checkpoints/."
+}

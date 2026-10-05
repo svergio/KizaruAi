@@ -4,10 +4,10 @@ from pathlib import Path
 
 import torch
 
-from kizaru.checkpoint import load_model, save_model
-from kizaru.data import get_batch, load_corpus, text_to_seq
-from kizaru.model import TextRNN
-from kizaru.sample import evaluate
+from core.text.checkpoint import load_model, save_model
+from core.corpus.lyrics import get_batch, load_corpus, text_to_seq
+from core.text.rnn import TextRNN
+from core.text.sample import _completed_lyric_lines, evaluate
 
 
 SAMPLE = (
@@ -18,6 +18,54 @@ SAMPLE = (
 
 
 class TextRNNTests(unittest.TestCase):
+    def test_completed_lyric_lines_ignores_blanks(self):
+        text = "куплет раз\n\nкуплет два\n\nкуплет три\n"
+        self.assertEqual(_completed_lyric_lines(text), 3)
+        self.assertEqual(text.count("\n"), 5)
+        self.assertEqual(_completed_lyric_lines("Я без перевода"), 0)
+
+    def test_max_lines_skips_blank_newlines(self):
+        local = SAMPLE + "!"
+        _, char_to_idx, idx_to_char = text_to_seq(local)
+        model = TextRNN(
+            input_size=len(idx_to_char),
+            hidden_size=16,
+            embedding_size=16,
+            n_layers=1,
+        )
+        # Fill / blank / fill / blank / fill, then junk that must not appear after stop.
+        script = list("дом.\n\nпуть.\n\nгород\n!!!!")
+        ids = [char_to_idx[ch] for ch in script]
+        cursor = {"i": 0}
+
+        def fake_choice(_n, p=None):
+            i = cursor["i"]
+            cursor["i"] = min(i + 1, len(ids) - 1)
+            return ids[i]
+
+        import numpy as np
+
+        original = np.random.choice
+        np.random.choice = fake_choice
+        try:
+            lined = evaluate(
+                model,
+                char_to_idx,
+                idx_to_char,
+                start_text="Я",
+                prediction_len=80,
+                temp=0.8,
+                max_lines=3,
+            )
+        finally:
+            np.random.choice = original
+
+        # rstrip() drops the final newline, so count visible non-empty lines.
+        non_empty = sum(1 for line in lined.splitlines() if line.strip())
+        self.assertEqual(non_empty, 3)
+        self.assertGreater(lined.count("\n"), 3)
+        self.assertNotIn("!", lined)
+
     def test_text_to_seq_roundtrip(self):
         sequence, char_to_idx, idx_to_char = text_to_seq(SAMPLE)
         restored = "".join(idx_to_char[int(idx)] for idx in sequence)
@@ -45,6 +93,10 @@ class TextRNNTests(unittest.TestCase):
         self.assertEqual(tuple(output.shape), (31, 4, len(idx_to_char)))
         self.assertEqual(tuple(hidden_out[0].shape), (2, 4, 32))
 
+        logits, stepped = model.step(torch.LongTensor([char_to_idx["Я"]]), model.init_hidden(1))
+        self.assertEqual(tuple(logits.shape), (1, 1, len(idx_to_char)))
+        self.assertEqual(tuple(stepped[0].shape), (2, 1, 32))
+
         text = evaluate(model, char_to_idx, idx_to_char, start_text="Я", prediction_len=20, temp=0.8)
         self.assertTrue(text.startswith("Я"))
         self.assertGreaterEqual(len(text), 15)
@@ -58,7 +110,9 @@ class TextRNNTests(unittest.TestCase):
             temp=0.8,
             max_lines=2,
         )
-        self.assertLessEqual(lined.count("\n"), 2)
+        self.assertLessEqual(
+            _completed_lyric_lines(lined) - _completed_lyric_lines("Я"), 2
+        )
 
     def test_export_file_roundtrip(self):
         _, char_to_idx, idx_to_char = text_to_seq(SAMPLE)
@@ -82,20 +136,21 @@ class TextRNNTests(unittest.TestCase):
             loaded_bare, _, _, _ = load_model(path, device=torch.device("cpu"))
         self.assertIsInstance(loaded_bare, TextRNN)
 
-    def test_legacy_messages_loadable(self):
-        path = Path("legacy/messages.csv")
+    def test_fallback_messages_loadable(self):
+        path = Path("data/corpus/messages_fallback.csv")
         self.assertTrue(path.exists())
         self.assertGreater(len(load_corpus(path)), 1000)
 
-    def test_bot_requires_model_file(self):
-        from bot import build_bot
+    def test_bot_ai_slash_group(self):
+        from app.discord.__main__ import build_bot
 
-        _, char_to_idx, idx_to_char = text_to_seq(SAMPLE)
-        model = TextRNN(len(idx_to_char), 8, 8, n_layers=1)
-        bot = build_bot(model, char_to_idx, idx_to_char, torch.device("cpu"))
-        names = {command.name for command in bot.commands}
-        self.assertIn("talk", names)
-        self.assertIn("mood", names)
+        with tempfile.TemporaryDirectory() as folder:
+            bot = build_bot(db_path=Path(folder) / "bot.db")
+            group = bot.tree.get_command("ai")
+            self.assertIsNotNone(group)
+            names = {command.name for command in group.commands}
+            self.assertEqual(names, {"text", "mood", "pic", "help"})
+            self.assertEqual(len(list(bot.commands)), 0)
 
 
 if __name__ == "__main__":

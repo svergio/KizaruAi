@@ -1,0 +1,81 @@
+{
+  "team": "A",
+  "slot": "lstm_char",
+  "status": "done",
+  "wall_start": "2026-10-05T00:42:48+03:00",
+  "wall_minutes": 90,
+  "elapsed_minutes": 88.1,
+  "corpus": "experiments/shared/train.txt",
+  "out": "experiments/lstm_char/team_a/model.pt",
+  "best_run": 3,
+  "args": {
+    "level": "char",
+    "hidden_size": 768,
+    "embedding_size": 768,
+    "n_layers": 2,
+    "epochs": 40000,
+    "seq_len": 512,
+    "bptt": 128,
+    "lr": 0.001,
+    "batch_size": 12,
+    "eval_every": 50,
+    "seed": 42
+  },
+  "best_train_loss": 1.314612,
+  "test_ce": 1.3349659148229358,
+  "score_path": "experiments/lstm_char/team_a/score.json",
+  "previous_runs": [
+    {
+      "run": 1,
+      "args": {
+        "hidden_size": 256,
+        "embedding_size": 256,
+        "n_layers": 2,
+        "epochs": 40000,
+        "seq_len": 256,
+        "bptt": 64,
+        "lr": 0.003,
+        "batch_size": 16
+      },
+      "best_train_loss": 1.541193,
+      "stopped_after_min": 10.7,
+      "checkpoint": "experiments/lstm_char/team_a/model_run1.pt",
+      "why_stop": "Plateau ~1.54; upgrade capacity."
+    },
+    {
+      "run": 2,
+      "args": {
+        "hidden_size": 512,
+        "embedding_size": 512,
+        "n_layers": 2,
+        "epochs": 50000,
+        "seq_len": 384,
+        "bptt": 128,
+        "lr": 0.0015,
+        "batch_size": 16
+      },
+      "best_train_loss": 1.425682,
+      "stopped_after_min": 51.3,
+      "checkpoint": "experiments/lstm_char/team_a/model_run2.pt",
+      "why_stop": "Hard plateau ~1.43; try 768 width."
+    },
+    {
+      "run": 3,
+      "args": {
+        "hidden_size": 768,
+        "embedding_size": 768,
+        "n_layers": 2,
+        "epochs": 40000,
+        "seq_len": 512,
+        "bptt": 128,
+        "lr": 0.001,
+        "batch_size": 12
+      },
+      "best_train_loss": 1.314612,
+      "stopped_after_min": 86.7,
+      "checkpoint": "experiments/lstm_char/team_a/model_run3.pt",
+      "why_stop": "Wall budget; best train loss; kept as model.pt."
+    }
+  ],
+  "notes": "Winner is run3 768/768x2. Bench: ce=1.334966 repeat=0 cyr=1.0. Full shared train, no slice."
+}

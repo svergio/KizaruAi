@@ -1,0 +1,107 @@
+{
+  "team": "A",
+  "slot": "lstm_word",
+  "status": "done",
+  "wall_start": "2026-10-05T03:44:52+03:00",
+  "wall_minutes": 90,
+  "elapsed_minutes": 88.1,
+  "corpus": "experiments/shared/train.txt",
+  "out": "experiments/lstm_word/team_a/model.pt",
+  "best_run": 4,
+  "args": {
+    "level": "word",
+    "hidden_size": 512,
+    "embedding_size": 512,
+    "n_layers": 2,
+    "seq_len": 128,
+    "bptt": 64,
+    "min_freq": 5,
+    "epochs": 40000,
+    "lr": 0.002,
+    "batch_size": 16,
+    "eval_every": 50,
+    "seed": 42
+  },
+  "best_train_loss": 3.711552,
+  "test_ce": 3.739446,
+  "score_path": "experiments/lstm_word/team_a/score.json",
+  "previous_runs": [
+    {
+      "run": 1,
+      "args": {
+        "hidden_size": 256,
+        "embedding_size": 256,
+        "n_layers": 2,
+        "seq_len": 64,
+        "bptt": 32,
+        "min_freq": 3,
+        "epochs": 12000,
+        "lr": 0.003,
+        "batch_size": 16
+      },
+      "best_train_loss": 4.216294,
+      "test_ce": 4.079659,
+      "stopped_after_min": 11.1,
+      "checkpoint": "experiments/lstm_word/team_a/model_run1.pt",
+      "why_stop": "Plateau ~4.2-4.4; upgrade capacity."
+    },
+    {
+      "run": 2,
+      "args": {
+        "hidden_size": 512,
+        "embedding_size": 512,
+        "n_layers": 2,
+        "seq_len": 96,
+        "bptt": 48,
+        "min_freq": 3,
+        "epochs": 40000,
+        "lr": 0.001,
+        "batch_size": 16
+      },
+      "best_train_loss": 4.026654,
+      "test_ce": 3.956931,
+      "stopped_after_min": 26.8,
+      "checkpoint": "experiments/lstm_word/team_a/model_run2.pt",
+      "why_stop": "Hard plateau ~4.05-4.2; try 768 width."
+    },
+    {
+      "run": 3,
+      "args": {
+        "hidden_size": 768,
+        "embedding_size": 768,
+        "n_layers": 2,
+        "seq_len": 128,
+        "bptt": 64,
+        "min_freq": 3,
+        "epochs": 40000,
+        "lr": 0.001,
+        "batch_size": 8
+      },
+      "best_train_loss": 4.058822,
+      "test_ce": 4.044353,
+      "stopped_after_min": 61.4,
+      "checkpoint": "experiments/lstm_word/team_a/model_run3.pt",
+      "why_stop": "UnicodeEncodeError on sample print; train/test worse than run2."
+    },
+    {
+      "run": 4,
+      "args": {
+        "hidden_size": 512,
+        "embedding_size": 512,
+        "n_layers": 2,
+        "seq_len": 128,
+        "bptt": 64,
+        "min_freq": 5,
+        "epochs": 40000,
+        "lr": 0.002,
+        "batch_size": 16
+      },
+      "best_train_loss": 3.711552,
+      "test_ce": 3.739446,
+      "stopped_after_min": 88.1,
+      "checkpoint": "experiments/lstm_word/team_a/model_run4.pt",
+      "why_stop": "Wall budget; best test CE among 4 runs."
+    }
+  ],
+  "notes": "Winner run4: 512/512x2 seq128 bptt64 min_freq5 lr2e-3 batch16. CE=3.739446. No kizaru_word.pt copy."
+}

@@ -1,0 +1,71 @@
+{
+  "team": "B",
+  "slot": "transformer_char",
+  "status": "done",
+  "wall_start": "2026-10-05T08:16:40.3943524+03:00",
+  "wall_minutes": 90,
+  "elapsed_minutes": 72.5,
+  "corpus": "experiments/shared/train.txt",
+  "out": "experiments/transformer/team_b/model.pt",
+  "best_run": 1,
+  "args": {
+    "arch": "transformer",
+    "level": "char",
+    "d_model": 384,
+    "n_layers": 8,
+    "n_heads": 8,
+    "block_size": 384,
+    "steps": 45000,
+    "lr": 0.00012,
+    "batch_size": 6,
+    "seed": 21
+  },
+  "best_train_loss": 1.212357,
+  "test_ce": 1.1664383880110614,
+  "score_path": "experiments/transformer/team_b/score.json",
+  "previous_runs": [
+    {
+      "run": 1,
+      "args": {
+        "arch": "transformer",
+        "level": "char",
+        "d_model": 384,
+        "n_layers": 8,
+        "n_heads": 8,
+        "block_size": 384,
+        "steps": 45000,
+        "lr": 0.00012,
+        "batch_size": 6,
+        "seed": 21
+      },
+      "best_train_loss": 1.212357,
+      "test_ce": 1.1664383880110614,
+      "cyrillic_ratio": 1.0,
+      "repeat_ratio": 0.0,
+      "stopped_after_min": 28.0,
+      "checkpoint": "experiments/transformer/team_b/model_run1.pt",
+      "why_stop": "Completed 45k steps. Beat Team A CE 1.188683. Kept as deliverable."
+    },
+    {
+      "run": 2,
+      "args": {
+        "arch": "transformer",
+        "level": "char",
+        "d_model": 384,
+        "n_layers": 8,
+        "n_heads": 8,
+        "block_size": 384,
+        "steps": 65000,
+        "lr": 0.0001,
+        "batch_size": 6,
+        "seed": 33
+      },
+      "best_train_loss": null,
+      "test_ce": null,
+      "stopped_after_min": 72.5,
+      "checkpoint": null,
+      "why_stop": "Process killed externally at ~step 500-2000 (exit -1) on multiple restart attempts; discarded. Restored run1 model.pt."
+    }
+  ],
+  "notes": "Best run1: 384/8/8 block384 steps45k lr1.2e-4 batch6 seed21. CE=1.166438 vs Team A 1.188683. No checkpoint copy. No gpt."
+}

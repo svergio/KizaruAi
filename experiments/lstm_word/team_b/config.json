@@ -1,0 +1,75 @@
+{
+  "team": "B",
+  "slot": "lstm_word",
+  "status": "done",
+  "wall_start": "2026-10-05T05:15:30+03:00",
+  "wall_minutes": 90,
+  "elapsed_minutes": 88.0,
+  "corpus": "experiments/shared/train.txt",
+  "out": "experiments/lstm_word/team_b/model.pt",
+  "best_run": 2,
+  "args": {
+    "level": "word",
+    "hidden_size": 512,
+    "embedding_size": 512,
+    "n_layers": 2,
+    "seq_len": 128,
+    "bptt": 64,
+    "min_freq": 5,
+    "epochs": 50000,
+    "lr": 0.0025,
+    "batch_size": 16,
+    "eval_every": 50,
+    "seed": 123
+  },
+  "best_train_loss": 3.58993,
+  "test_ce": 3.70513,
+  "score_path": "experiments/lstm_word/team_b/score.json",
+  "previous_runs": [
+    {
+      "run": 1,
+      "args": {
+        "hidden_size": 512,
+        "embedding_size": 512,
+        "n_layers": 2,
+        "seq_len": 160,
+        "bptt": 80,
+        "min_freq": 5,
+        "epochs": 50000,
+        "lr": 0.002,
+        "batch_size": 12,
+        "seed": 7
+      },
+      "best_train_loss": 3.658284,
+      "test_ce": 3.737437,
+      "cyrillic_ratio": 0.9227,
+      "repeat_ratio": 0.0,
+      "stopped_after_min": 69.2,
+      "checkpoint": "experiments/lstm_word/team_b/model_run1.pt",
+      "why_stop": "Plateau; CE 3.737 barely under A 3.739 but cyrillic loses <0.02 tiebreak."
+    },
+    {
+      "run": 2,
+      "args": {
+        "hidden_size": 512,
+        "embedding_size": 512,
+        "n_layers": 2,
+        "seq_len": 128,
+        "bptt": 64,
+        "min_freq": 5,
+        "epochs": 50000,
+        "lr": 0.0025,
+        "batch_size": 16,
+        "seed": 123
+      },
+      "best_train_loss": 3.58993,
+      "test_ce": 3.70513,
+      "cyrillic_ratio": 0.8774,
+      "repeat_ratio": 0.0,
+      "stopped_after_min": 87.6,
+      "checkpoint": "experiments/lstm_word/team_b/model_run2.pt",
+      "why_stop": "Wall budget; CE gap vs A is 0.034 (>=0.02) so CE decides."
+    }
+  ],
+  "notes": "Winner run2: 512/512x2 seq128 bptt64 min_freq5 lr2.5e-3 batch16 seed123. CE=3.70513 vs A 3.739446. No checkpoint copy. Own train, not A .pt."
+}

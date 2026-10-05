@@ -1,0 +1,51 @@
+{
+  "team": "B",
+  "slot": "gpt_char",
+  "status": "done",
+  "wall_start": "2026-10-05T08:54:08.9396426+03:00",
+  "wall_minutes": 90,
+  "elapsed_minutes": 29.4,
+  "corpus": "experiments/shared/train.txt",
+  "out": "experiments/gpt/team_b/model.pt",
+  "best_run": 1,
+  "args": {
+    "arch": "gpt",
+    "level": "char",
+    "d_model": 384,
+    "n_layers": 8,
+    "n_heads": 8,
+    "block_size": 384,
+    "steps": 45000,
+    "lr": 0.00012,
+    "batch_size": 6,
+    "seed": 21
+  },
+  "best_train_loss": 1.208945,
+  "test_ce": 1.1711734903165303,
+  "score_path": "experiments/gpt/team_b/score.json",
+  "previous_runs": [
+    {
+      "run": 1,
+      "args": {
+        "arch": "gpt",
+        "level": "char",
+        "d_model": 384,
+        "n_layers": 8,
+        "n_heads": 8,
+        "block_size": 384,
+        "steps": 45000,
+        "lr": 0.00012,
+        "batch_size": 6,
+        "seed": 21
+      },
+      "best_train_loss": 1.208945,
+      "test_ce": 1.1711734903165303,
+      "cyrillic_ratio": 1.0,
+      "repeat_ratio": 0.0,
+      "stopped_after_min": 29.4,
+      "checkpoint": "experiments/gpt/team_b/model_run1.pt",
+      "why_stop": "Completed; CE 1.171173 beats Team A 1.445534 by gap 0.274361 (>=0.02). No further retune needed."
+    }
+  ],
+  "notes": "Winner run1: d_model384 n_layers8 n_heads8 block384 steps45000 lr1.2e-4 batch6 seed21. CE=1.1711734903165303 vs A 1.445534246232753. Closed with clear CE win; ~29.4 min of 90."
+}
