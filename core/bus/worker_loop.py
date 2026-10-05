@@ -1,3 +1,4 @@
+import atexit
 import json
 import os
 import time
@@ -10,10 +11,25 @@ POLL_SEC = 0.35
 
 
 def register_worker(store: JobStore, worker_kind: str):
+    key = f"worker:{worker_kind}"
     store.set_meta(
-        f"worker:{worker_kind}",
+        key,
         json.dumps({"pid": os.getpid(), "kind": worker_kind}, ensure_ascii=False),
     )
+
+    def _unregister():
+        raw = store.get_meta(key)
+        if not raw:
+            return
+        try:
+            meta = json.loads(raw)
+        except json.JSONDecodeError:
+            store.clear_meta(key)
+            return
+        if isinstance(meta, dict) and int(meta.get("pid") or 0) == os.getpid():
+            store.clear_meta(key)
+
+    atexit.register(_unregister)
 
 
 def run_assigned_once(store: JobStore, worker_kind: str, processor) -> bool:

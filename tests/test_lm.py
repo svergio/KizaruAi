@@ -34,6 +34,22 @@ class LmTests(unittest.TestCase):
         logits = model(tokens)
         self.assertEqual(tuple(logits.shape), (3, 10, len(char_to_idx)))
 
+    def test_transformer_emb_projection_shape(self):
+        char_to_idx, _ = _vocab(SAMPLE)
+        model = SimpleTransformer(
+            len(char_to_idx),
+            d_model=32,
+            n_layers=2,
+            n_heads=4,
+            block_size=16,
+            embedding_size=300,
+        )
+        self.assertEqual(model.tok.embedding_dim, 300)
+        self.assertEqual(model.embedding_size, 300)
+        tokens = torch.randint(0, len(char_to_idx), (2, 8))
+        logits = model(tokens)
+        self.assertEqual(tuple(logits.shape), (2, 8, len(char_to_idx)))
+
     def test_gpt_logits_shape(self):
         char_to_idx, _ = _vocab(SAMPLE)
         model = MiniGPT(len(char_to_idx), d_model=32, n_layers=2, n_heads=4, block_size=16)

@@ -298,13 +298,11 @@ GENIUS_ARTISTS = (
     'Loboda',
     'Detsl-aka-Le-Truk',
     'Daite-tank',
-    # исправленные slug'и вместо fail artist-not-found из прогона 300
     'Alj',
     'Malbek',
     'Crip-a-crip',
     'Invisible-inc',
     'King-sd',
-    'Toxi',
     'Klava-coca',
     'Atlantida-project',
 )

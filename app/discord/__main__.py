@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import base64
-import contextlib
 import logging
 import os
 from io import BytesIO
@@ -17,10 +16,11 @@ from core.bus.queue import (
     JobStore,
     PayloadTooLargeError,
     QueueFullError,
+    format_eta_ru,
     poll_until_done,
 )
 from core.mood.model import mood_source
-from core.bus.routing import build_pic_payload, build_text_payload
+from core.bus.routing import build_pic_payload, build_text_payload, resolve_worker_kind
 from core.image.ascii import (
     CLI_DEFAULT_CELLS,
     CLI_DEFAULT_SCALE,
@@ -50,6 +50,10 @@ ATTACHMENT_TOO_LARGE_MSG = (
 )
 PAYLOAD_TOO_LARGE_MSG = "Запрос слишком большой для очереди."
 QUEUE_FULL_MSG = "Очередь переполнена. Попробуй через несколько минут."
+SERVICE_OFFLINE_MSG = (
+    "Модуль {name} сейчас не активен. "
+    "Попробуй позже или выбери другой."
+)
 DEFAULT_DB = Path("data/bot.db")
 
 log = logging.getLogger("kizaru.bot")
@@ -58,7 +62,7 @@ AI_HELP = (
     "**/ai text** — продолжение текста. "
     "`model`: lstm (символы), lstm-word (слова), transformer, gpt, deepseek или bert-gen. "
     "`start` по умолчанию «Я». "
-    "Если воркер модели не запущен, бот ответит сразу.\n"
+    "Если модуль модели не активен, бот ответит сразу.\n"
     f"Параметры генерации необязательны, пусто — дефолт модели: "
     f"`temp` {TEMP_MIN}-{TEMP_MAX} (ниже — повторы строк, выше — битые слова), "
     f"`lines` {LINES_MIN}-{LINES_MAX} строк, "
@@ -143,24 +147,35 @@ def _worker_has(store: JobStore, key: str) -> bool | None:
     return bool(models.get(key))
 
 
-async def _maybe_queue_hint(interaction, store: JobStore, job_id: int):
-    await asyncio.sleep(1.0)
-    pos = await asyncio.to_thread(store.queue_position, job_id)
-    if pos > 1:
-        try:
-            await interaction.followup.send(f"ты {pos}-й в очереди", ephemeral=True)
-        except discord.HTTPException:
-            pass
+def format_queue_ack_message(info: dict) -> str:
+    pos = int(info.get("position") or 1)
+    ahead = int(info.get("ahead") or 0)
+    eta = format_eta_ru(int(info.get("eta_sec") or 1))
+    if ahead > 0:
+        return (
+            f"Модуль занят, ты в очереди: позиция {pos}. "
+            f"Оценка ожидания: {eta}."
+        )
+    return f"Обрабатываю запрос… Оценка: {eta}."
 
 
-async def _wait_job(interaction, store: JobStore, job_id: int):
-    hint = asyncio.create_task(_maybe_queue_hint(interaction, store, job_id))
+async def _defer_with_queue_ack(
+    interaction: discord.Interaction,
+    store: JobStore,
+    job_id: int,
+    worker_kind: str,
+):
+    await interaction.response.defer(thinking=True)
     try:
-        return await poll_until_done(store, job_id)
-    finally:
-        hint.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await hint
+        info = await asyncio.to_thread(store.estimate_queue_wait, job_id, worker_kind)
+        msg = format_queue_ack_message(info)
+        await interaction.edit_original_response(content=msg)
+    except Exception as exc:
+        log.warning("queue ack failed job_id=%s: %s", job_id, exc)
+
+
+async def _wait_job(store: JobStore, job_id: int):
+    return await poll_until_done(store, job_id)
 
 
 def _log_user_error(context: str, exc: BaseException):
@@ -203,7 +218,7 @@ async def _send_job_result(interaction, result: dict):
             file=discord.File(BytesIO(raw), filename=result["filename"]),
         )
         return
-    await interaction.followup.send("Неизвестный ответ воркера.")
+    await interaction.followup.send("Неизвестный ответ. Попробуй ещё раз.")
 
 
 def build_bot(db_path=None):
@@ -249,33 +264,27 @@ def build_bot(db_path=None):
     ):
         key = model.value
         has = _worker_has(store, key)
-        if has is False:
-            worker_name = {
-                "lstm": "app.workers.lstm",
-                "lstm-word": "app.workers.lstm_word",
-                "transformer": "app.workers.transformer",
-                "gpt": "app.workers.gpt",
-                "deepseek": "app.workers.deepseek",
-                "bert-gen": "app.workers.bert_gen",
-            }.get(key, key)
+        if has is not True:
             await interaction.response.send_message(
-                f"Модель {key} не запущена ({worker_name})."
+                SERVICE_OFFLINE_MSG.format(name=key)
             )
             return
+        payload = build_text_payload(
+            key, start, temp=temp, length=length, lines=lines, iters=iters
+        )
         job_id = await _enqueue_or_reply(
             interaction,
             store,
             _user_id(interaction),
             "text",
-            build_text_payload(
-                key, start, temp=temp, length=length, lines=lines, iters=iters
-            ),
+            payload,
         )
         if job_id is None:
             return
-        await interaction.response.defer(thinking=True)
+        worker_kind = resolve_worker_kind("text", payload)
+        await _defer_with_queue_ack(interaction, store, job_id, worker_kind)
         try:
-            result = await _wait_job(interaction, store, job_id)
+            result = await _wait_job(store, job_id)
         except Exception as exc:
             _log_user_error("ai text", exc)
             await interaction.followup.send(GENERIC_ERROR_MSG)
@@ -286,9 +295,9 @@ def build_bot(db_path=None):
     @app_commands.describe(text="Текст; пусто — взять reply")
     async def ai_mood(interaction: discord.Interaction, text: str = ""):
         has = _worker_has(store, "mood")
-        if has is False:
+        if has is not True:
             await interaction.response.send_message(
-                "Mood-воркер не запущен (app.workers.mood)."
+                SERVICE_OFFLINE_MSG.format(name="mood")
             )
             return
         source = await _mood_input(interaction, text)
@@ -297,18 +306,21 @@ def build_bot(db_path=None):
                 "Укажи text или вызови команду ответом на сообщение с текстом."
             )
             return
+        payload = {"source": source}
         job_id = await _enqueue_or_reply(
             interaction,
             store,
             _user_id(interaction),
             "mood",
-            {"source": source},
+            payload,
         )
         if job_id is None:
             return
-        await interaction.response.defer(thinking=True)
+        await _defer_with_queue_ack(
+            interaction, store, job_id, resolve_worker_kind("mood", payload)
+        )
         try:
-            result = await _wait_job(interaction, store, job_id)
+            result = await _wait_job(store, job_id)
         except Exception as exc:
             _log_user_error("ai mood", exc)
             await interaction.followup.send(GENERIC_ERROR_MSG)
@@ -371,9 +383,11 @@ def build_bot(db_path=None):
         )
         if job_id is None:
             return
-        await interaction.response.defer(thinking=True)
+        await _defer_with_queue_ack(
+            interaction, store, job_id, resolve_worker_kind("pic", payload)
+        )
         try:
-            result = await _wait_job(interaction, store, job_id)
+            result = await _wait_job(store, job_id)
         except Exception as exc:
             _log_user_error("ai pic", exc)
             await interaction.followup.send(GENERIC_ERROR_MSG)

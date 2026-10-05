@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 
 import torch
@@ -19,6 +20,39 @@ def get_device():
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+def resolve_infer_device(runtime: dict):
+    """Resolve CUDA only on first job so idle workers do not open a GPU context."""
+    device = runtime.get("device")
+    if device is None:
+        device = get_device()
+        runtime["device"] = device
+    return device
+
+
+def release_cuda():
+    import gc
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+
+
+@contextmanager
+def cuda_for_job(model, device):
+    """Weights stay on CPU between jobs; move to CUDA only for one inference."""
+    target = device if device is not None else torch.device("cpu")
+    if getattr(target, "type", str(target)) == "cpu":
+        yield
+        return
+    model.to(target)
+    try:
+        yield
+    finally:
+        model.to("cpu")
+        release_cuda()
 
 
 def _vocab_on_model(model, char_to_idx, idx_to_char):
@@ -63,6 +97,7 @@ def save_model(path, model, char_to_idx, idx_to_char, **meta):
         payload["n_layers"] = model.n_layers
         payload["n_heads"] = model.n_heads
         payload["block_size"] = model.block_size
+        payload["embedding_size"] = getattr(model, "embedding_size", model.d_model)
         if arch == ARCH_DEEPSEEK:
             payload["kv_lora_rank"] = model.kv_lora_rank
             payload["q_lora_rank"] = model.q_lora_rank
@@ -81,6 +116,7 @@ def _build_lm(arch, vocab_size, payload):
         "n_layers": payload["n_layers"],
         "n_heads": payload["n_heads"],
         "block_size": payload["block_size"],
+        "embedding_size": payload.get("embedding_size", payload["d_model"]),
     }
     if arch == ARCH_BERT_GEN:
         kwargs["mask_id"] = payload.get("mask_id", vocab_size - 1)
@@ -146,6 +182,7 @@ def load_model(path, device=None):
             "d_model",
             "n_heads",
             "block_size",
+            "embedding_size",
             "kv_lora_rank",
             "q_lora_rank",
             "mask_id",

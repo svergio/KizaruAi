@@ -23,6 +23,28 @@ class BotIOTests(unittest.TestCase):
             names = {command.name for command in group.commands}
             self.assertEqual(names, {"text", "mood", "pic", "help"})
 
+    def test_queue_ack_message_ru(self):
+        from app.discord.__main__ import (
+            SERVICE_OFFLINE_MSG,
+            format_queue_ack_message,
+        )
+
+        offline = SERVICE_OFFLINE_MSG.format(name="lstm")
+        self.assertIn("Модуль lstm сейчас не активен", offline)
+        self.assertIn("выбери другой", offline)
+        self.assertNotIn("воркер", offline)
+        self.assertNotIn("Сервис", offline)
+        busy = format_queue_ack_message(
+            {"position": 3, "ahead": 2, "eta_sec": 60}
+        )
+        self.assertIn("Модуль занят", busy)
+        self.assertIn("позиция 3", busy)
+        self.assertNotIn("Сервис", busy)
+        idle = format_queue_ack_message(
+            {"position": 1, "ahead": 0, "eta_sec": 20}
+        )
+        self.assertIn("Обрабатываю", idle)
+
 
 if __name__ == "__main__":
     unittest.main()

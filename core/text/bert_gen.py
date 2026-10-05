@@ -56,15 +56,22 @@ class BertMLM(nn.Module):
         block_size=256,
         dropout=0.1,
         mask_id=None,
+        embedding_size=None,
     ):
         super().__init__()
         self.d_model = d_model
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.block_size = block_size
+        self.embedding_size = int(embedding_size or d_model)
         self.mask_id = vocab_size - 1 if mask_id is None else int(mask_id)
         self.vocab_size = vocab_size
-        self.tok = nn.Embedding(vocab_size, d_model)
+        self.tok = nn.Embedding(vocab_size, self.embedding_size)
+        self.emb_proj = (
+            nn.Identity()
+            if self.embedding_size == d_model
+            else nn.Linear(self.embedding_size, d_model, bias=False)
+        )
         self.pos = nn.Embedding(block_size, d_model)
         self.drop = nn.Dropout(dropout)
         self.blocks = nn.ModuleList(
@@ -79,7 +86,7 @@ class BertMLM(nn.Module):
         token_ids = token_ids[:, : self.block_size]
         batch, steps = token_ids.shape
         positions = torch.arange(steps, device=token_ids.device)
-        x = self.drop(self.tok(token_ids) + self.pos(positions))
+        x = self.drop(self.emb_proj(self.tok(token_ids)) + self.pos(positions))
         for block in self.blocks:
             x = block(x)
         return self.head(self.ln_f(x))
@@ -120,13 +127,19 @@ def generate_mlm(
     temp=1.0,
     device=None,
     max_lines=6,
+    level="char",
 ):
+    from core.text.tokenize import TOKEN_NL, detokenize, encode_words
+
     model.eval()
     if device is None:
         device = next(model.parameters()).device
     seq_len = int(seq_len or min(128, model.block_size))
     seq_len = min(seq_len, model.block_size)
-    seed = [char_to_idx[ch] for ch in (start_text or "") if ch in char_to_idx]
+    if level == "word":
+        seed = encode_words(start_text or "", char_to_idx)
+    else:
+        seed = [char_to_idx[ch] for ch in (start_text or "") if ch in char_to_idx]
     frozen = min(len(seed), seq_len)
     ids = seed[:frozen] + [model.mask_id] * (seq_len - frozen)
     tokens = torch.tensor([ids], dtype=torch.long, device=device)
@@ -142,6 +155,21 @@ def generate_mlm(
         tokens[0, pos] = model.mask_id
         logits = model(tokens)[0, pos]
         tokens[0, pos] = _sample_id(logits, temp, model.mask_id)
+    if level == "word":
+        out_tokens = []
+        lines = 0
+        for idx in tokens[0].tolist():
+            if idx == model.mask_id:
+                continue
+            tok = idx_to_char.get(int(idx), "")
+            if not tok:
+                continue
+            out_tokens.append(tok)
+            if tok == TOKEN_NL:
+                lines += 1
+                if max_lines is not None and lines >= max_lines:
+                    break
+        return detokenize(out_tokens).rstrip()
     chars = []
     lines = 0
     for idx in tokens[0].tolist():

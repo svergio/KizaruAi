@@ -119,6 +119,7 @@ class MiniDeepSeek(nn.Module):
         dropout=0.1,
         kv_lora_rank=None,
         q_lora_rank=None,
+        embedding_size=None,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -126,9 +127,15 @@ class MiniDeepSeek(nn.Module):
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.block_size = block_size
+        self.embedding_size = int(embedding_size or d_model)
         self.kv_lora_rank = _lora_rank(d_model, kv_lora_rank)
         self.q_lora_rank = _lora_rank(d_model, q_lora_rank)
-        self.tok = nn.Embedding(vocab_size, d_model)
+        self.tok = nn.Embedding(vocab_size, self.embedding_size)
+        self.emb_proj = (
+            nn.Identity()
+            if self.embedding_size == d_model
+            else nn.Linear(self.embedding_size, d_model, bias=False)
+        )
         self.pos = nn.Embedding(block_size, d_model)
         self.drop = nn.Dropout(dropout)
         self.blocks = nn.ModuleList(
@@ -153,7 +160,7 @@ class MiniDeepSeek(nn.Module):
         token_ids = token_ids[:, -self.block_size :]
         batch, steps = token_ids.shape
         positions = torch.arange(steps, device=token_ids.device)
-        x = self.drop(self.tok(token_ids) + self.pos(positions))
+        x = self.drop(self.emb_proj(self.tok(token_ids)) + self.pos(positions))
         for block in self.blocks:
             x = block(x)
         return self.head(self.norm_f(x))

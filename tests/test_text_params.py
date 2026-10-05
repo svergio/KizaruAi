@@ -88,11 +88,12 @@ class PayloadTests(unittest.TestCase):
 
 
 class HandlerWiringTests(unittest.TestCase):
-    def _runtime(self):
+    def _runtime(self, level="char"):
         model = mock.Mock()
         model.block_size = 256
         return {
             "device": "cpu",
+            "level": level,
             "transformer": (model, {}, {}),
             "gpt": (model, {}, {}),
             "deepseek": (model, {}, {}),
@@ -147,6 +148,34 @@ class HandlerWiringTests(unittest.TestCase):
         kwargs = gen.call_args.kwargs
         self.assertEqual(kwargs["n_iters"], 7)
         self.assertEqual(kwargs["seq_len"], 256)
+        self.assertEqual(kwargs["level"], "char")
+
+    def test_bert_gen_handler_passes_word_level(self):
+        payload = build_text_payload("bert-gen", "Я", length=48)
+        with mock.patch.object(handlers, "generate_mlm", return_value="x") as gen:
+            handlers.job_text_bert_gen(payload, self._runtime(level="word"))
+        kwargs = gen.call_args.kwargs
+        self.assertEqual(kwargs["level"], "word")
+        self.assertEqual(kwargs["seq_len"], 48)
+
+    def test_word_lm_handler_uses_evaluate_lm_words(self):
+        payload = build_text_payload("transformer", "Я", length=90)
+        with mock.patch.object(handlers, "evaluate_lm_words", return_value="x") as word_gen:
+            with mock.patch.object(handlers, "evaluate_lm", return_value="x") as char_gen:
+                handlers.job_text_transformer(payload, self._runtime(level="word"))
+        self.assertTrue(word_gen.called)
+        self.assertFalse(char_gen.called)
+        self.assertEqual(word_gen.call_args.kwargs["prediction_len"], 90)
+
+        with mock.patch.object(handlers, "evaluate_lm_words", return_value="x") as word_gen:
+            with mock.patch.object(handlers, "evaluate_lm", return_value="x") as char_gen:
+                handlers.job_text_gpt({"start": "Я"}, self._runtime(level="char"))
+        self.assertTrue(char_gen.called)
+        self.assertFalse(word_gen.called)
+
+        with mock.patch.object(handlers, "evaluate_lm_words", return_value="x") as word_gen:
+            handlers.job_text_deepseek({"start": "Я"}, self._runtime(level="word"))
+        self.assertEqual(word_gen.call_args.kwargs["prediction_len"], 72)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.text.checkpoint import (
+    ARCH_BERT_GEN,
     ARCH_DEEPSEEK,
     ARCH_GPT,
     ARCH_RNN,
@@ -148,7 +149,7 @@ def bench(ckpt, test_path, seeds_path, out_path, device=None):
     ids = _encode(test_text, vocab, word)
     if len(ids) < 2:
         raise ValueError("test sequence too short after vocab filter")
-    if arch in {ARCH_TRANSFORMER, ARCH_GPT, ARCH_DEEPSEEK}:
+    if arch in {ARCH_TRANSFORMER, ARCH_GPT, ARCH_DEEPSEEK, ARCH_BERT_GEN}:
         ce, ntok = _lm_ce(model, ids, device)
     else:
         ce, ntok = _rnn_ce(model, ids, device)

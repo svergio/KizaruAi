@@ -58,7 +58,7 @@ python -m training.train_mood --out checkpoints/mood.pt
 
 **LSTM** (`training.train`): `256/256×2`; char `--epochs 12000 --bptt 64`; word seq 64 / bptt 32. Ещё: `--corpus`, `--out`, `--batch-size`, `--hidden-size`, `--embedding-size`, `--n-layers`, `--min-freq`, `--whitelist`, `--init-navec`, `--navec-tokenizer`, `--navec-weights`, `--lr`, `--eval-every`, `--gen-len`, `--temp`, `--start`, `--seed`.
 
-**Transformer / GPT / DeepSeek** (`training.train_lm`): char `d_model=128`, `--block-size 256`, `--steps 25000`. Ещё: `--arch`, `--level`, `--corpus`, `--out`, `--batch-size`, `--n-layers`, `--n-heads`, `--min-freq`, `--lr`, `--eval-every`, `--gen-len`, `--temp`, `--start`, `--seed`. Для `--arch deepseek`: `--kv-lora-rank`, `--q-lora-rank` (дефолт `d_model//4`).
+**Transformer / GPT / DeepSeek / BERT-gen** (`training.train_lm`): char `d_model=128`, `--block-size 256`, `--steps 25000`. Word + Navec: `--level word --whitelist … --init-navec --embedding-size 300` (projects into `d_model` when needed). Ещё: `--arch`, `--level`, `--corpus`, `--out`, `--batch-size`, `--n-layers`, `--n-heads`, `--embedding-size`, `--min-freq`, `--lr`, `--eval-every`, `--gen-len`, `--temp`, `--start`, `--seed`. Для `--arch deepseek`: `--kv-lora-rank`, `--q-lora-rank` (дефолт `d_model//4`).
 
 Пока пишутся `.pt`, не поднимай текстовые воркеры на той же GPU.
 
@@ -76,6 +76,14 @@ python -m app.cli.generate --arch deepseek --start "Я"
 
 ## Бот (процессы)
 
+Видимые консоли + логи в `var/logs/`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start_all.ps1
+```
+
+Или вручную (по одному процессу):
+
 ```bash
 set DISCORD_TOKEN=...
 python -m app.orchestrator --db data/bot.db
@@ -90,6 +98,8 @@ python -m app.workers.still --db data/bot.db
 python -m app.workers.video --db data/bot.db
 python -m app.discord --db data/bot.db
 ```
+
+**VRAM:** текстовые и mood-воркеры держат веса на CPU; CUDA открывается только на первой джобе (`resolve_infer_device`). На время джобы `.to(cuda)`, после — `.to(cpu)` + `empty_cache` (`cuda_for_job`). Idle без джоб не держит веса на GPU; на Windows WDDM после первой джобы процесс может оставить CUDA-контекст (~сотни MiB), но не полный чекпоинт.
 
 **Админ-панель:** `python -m app.web` — http://127.0.0.1:8765/ (БД `data/bot.db`).
 

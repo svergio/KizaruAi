@@ -19,6 +19,22 @@ def _completed_lyric_lines(text: str) -> int:
     return sum(1 for line in text.split("\n")[:-1] if line.strip())
 
 
+def _sample_index(probs, vocab_size, block_ids=None):
+    probs = np.asarray(probs, dtype=np.float64).copy()
+    if probs.shape[0] > vocab_size:
+        probs = probs[:vocab_size]
+    if block_ids:
+        for idx in block_ids:
+            i = int(idx)
+            if 0 <= i < probs.shape[0]:
+                probs[i] = 0.0
+    total = float(probs.sum())
+    if total <= 0:
+        return int(np.random.randint(0, probs.shape[0]))
+    probs = probs / total
+    return int(np.random.choice(probs.shape[0], p=probs))
+
+
 def _completed_lyric_lines_tokens(ids, idx_to_token) -> int:
     from core.text.tokenize import TOKEN_NL
 
@@ -61,7 +77,7 @@ def evaluate(
             # один символ из текущего hidden; следующий шаг ест уже выбранный токен
             logits = output.reshape(-1).cpu()
             probs = F.softmax(logits / max(temp, 1e-6), dim=-1).numpy()
-            top_index = int(np.random.choice(len(char_to_idx), p=probs))
+            top_index = _sample_index(probs, len(char_to_idx))
             predicted_text += idx_to_char[top_index]
             output, hidden = model.step(torch.LongTensor([top_index]).to(device), hidden)
             if (
@@ -82,7 +98,7 @@ def evaluate_words(
     device=None,
     max_lines=None,
 ):
-    from core.text.tokenize import detokenize, encode_words
+    from core.text.tokenize import TOKEN_UNK, detokenize, encode_words
 
     if device is None:
         device = next(model.parameters()).device
@@ -90,6 +106,7 @@ def evaluate_words(
     hidden = model.init_hidden(1, device=device)
     ids = encode_words(start_text, token_to_idx)
     start_lines = _completed_lyric_lines_tokens(ids, idx_to_token)
+    block = [token_to_idx[TOKEN_UNK]] if TOKEN_UNK in token_to_idx else None
 
     with torch.no_grad():
         output = None
@@ -98,7 +115,7 @@ def evaluate_words(
         for _ in range(prediction_len):
             logits = output.reshape(-1).cpu()
             probs = F.softmax(logits / max(temp, 1e-6), dim=-1).numpy()
-            top_index = int(np.random.choice(len(token_to_idx), p=probs))
+            top_index = _sample_index(probs, len(token_to_idx), block_ids=block)
             ids.append(top_index)
             output, hidden = model.step(torch.LongTensor([top_index]).to(device), hidden)
             if (
@@ -107,7 +124,11 @@ def evaluate_words(
                 >= max_lines
             ):
                 break
-    tokens = [idx_to_token[int(idx)] for idx in ids]
+    tokens = [
+        idx_to_token[int(idx)]
+        for idx in ids
+        if idx_to_token.get(int(idx)) != TOKEN_UNK
+    ]
     return detokenize(tokens).rstrip()
 
 
@@ -134,7 +155,7 @@ def evaluate_lm(
             ctx = torch.LongTensor(ids[-block_size:]).view(1, -1).to(device)
             logits = model(ctx)[0, -1]
             probs = F.softmax(logits / max(temp, 1e-6), dim=-1).cpu().numpy()
-            top_index = int(np.random.choice(len(char_to_idx), p=probs))
+            top_index = _sample_index(probs, len(char_to_idx))
             ids.append(top_index)
             predicted_text += idx_to_char[top_index]
             if (
@@ -155,7 +176,7 @@ def evaluate_lm_words(
     device=None,
     max_lines=None,
 ):
-    from core.text.tokenize import detokenize, encode_words
+    from core.text.tokenize import TOKEN_UNK, detokenize, encode_words
 
     if device is None:
         device = next(model.parameters()).device
@@ -163,13 +184,14 @@ def evaluate_lm_words(
     ids = encode_words(start_text, token_to_idx)
     start_lines = _completed_lyric_lines_tokens(ids, idx_to_token)
     block_size = model.block_size
+    block = [token_to_idx[TOKEN_UNK]] if TOKEN_UNK in token_to_idx else None
 
     with torch.no_grad():
         for _ in range(prediction_len):
             ctx = torch.LongTensor(ids[-block_size:]).view(1, -1).to(device)
             logits = model(ctx)[0, -1]
             probs = F.softmax(logits / max(temp, 1e-6), dim=-1).cpu().numpy()
-            top_index = int(np.random.choice(len(token_to_idx), p=probs))
+            top_index = _sample_index(probs, len(token_to_idx), block_ids=block)
             ids.append(top_index)
             if (
                 max_lines is not None
@@ -177,5 +199,9 @@ def evaluate_lm_words(
                 >= max_lines
             ):
                 break
-    tokens = [idx_to_token[int(idx)] for idx in ids]
+    tokens = [
+        idx_to_token[int(idx)]
+        for idx in ids
+        if idx_to_token.get(int(idx)) != TOKEN_UNK
+    ]
     return detokenize(tokens).rstrip()

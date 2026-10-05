@@ -70,6 +70,18 @@ python -m training.train --level word ^
 - `--init-navec` — copy matching rows from `model.safetensors` into `model.encoder` (truncates/pads if dim ≠ 300). Prefer `--embedding-size 300` to keep full Navec vectors.
 - Helpers live in `core/text/pretrained_vocab.py` (`load_wordlevel_vocab`, `merge_whitelist`, `init_embedding_from_navec`).
 
+### 3) Word-level transformer / GPT / DeepSeek / BERT-gen LM
+
+Char LMs cannot use Navec rows (no word ids). Use `--level word` + the same whitelist/Navec flags on `training.train_lm`. Tok rows live in `model.tok`; optional `--embedding-size 300` keeps full Navec vectors and projects into `d_model` via `model.emb_proj` when sizes differ (keeps winner-ish `d_model=384` / 8 heads).
+
+```bash
+python -m training.train_lm --arch transformer --level word ^
+  --whitelist data/embeddings/navec_hudlit/seed_whitelist.txt ^
+  --init-navec --embedding-size 300 --d-model 384 --n-heads 8
+```
+
+Same pattern for `--arch gpt|deepseek|bert_gen`. Workers read checkpoint `level=word` and sample with word detokenize (`evaluate_lm_words` / word `generate_mlm`).
+
 Finetune from an existing `kizaru_word.pt` still needs a vocab-size-compatible path (growing vocab changes `Embedding` / `fc` shapes) — for slang rescue, a fresh word train with whitelist + Navec init is the clean route; or expand checkpoint tensors manually later.
 
 ## Coverage on the current corpus (2026-10-05)

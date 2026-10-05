@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from core.text.checkpoint import get_device, save_model
+from core.text.checkpoint import get_device, load_model, save_model
 from core.corpus.lyrics import BATCH_SIZE, SEQ_LEN, get_batch, load_corpus, text_to_seq
 from core.text.pretrained_vocab import (
     DEFAULT_TOKENIZER,
@@ -43,6 +43,17 @@ def parse_args():
     )
     parser.add_argument("--navec-tokenizer", default=str(DEFAULT_TOKENIZER))
     parser.add_argument("--navec-weights", default=str(DEFAULT_WEIGHTS))
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help="load .pt weights+vocab and continue from --start-epoch or ckpt epoch",
+    )
+    parser.add_argument(
+        "--start-epoch",
+        type=int,
+        default=None,
+        help="epoch index to continue from when --resume is set (default: ckpt meta epoch)",
+    )
     parser.add_argument("--lr", type=float, default=3e-3)
     parser.add_argument("--eval-every", type=int, default=50)
     parser.add_argument("--gen-len", type=int, default=None)
@@ -97,32 +108,64 @@ def main():
     whitelist = None
     if level == "word" and args.whitelist:
         whitelist = load_whitelist_file(args.whitelist)
-    if level == "word":
-        sequence, token_to_idx, idx_to_token = text_to_word_seq(
-            text_sample, min_freq=args.min_freq, whitelist=whitelist
+
+    start_epoch = 0
+    best_loss = float("inf")
+    if args.resume:
+        resume_path = Path(args.resume)
+        if not resume_path.is_file() or resume_path.stat().st_size < 1024:
+            raise FileNotFoundError(f"resume checkpoint missing/empty: {resume_path}")
+        model, token_to_idx, idx_to_token, meta = load_model(str(resume_path), device=device)
+        ckpt_level = meta.get("level") or level
+        if ckpt_level != level:
+            raise ValueError(f"resume level={ckpt_level!r} != --level {level!r}")
+        if level == "word":
+            sequence, token_to_idx, idx_to_token = text_to_word_seq(
+                text_sample, token_to_idx=token_to_idx
+            )
+        else:
+            sequence, _, _ = text_to_seq(text_sample)
+            # keep checkpoint vocab for char resume
+        start_epoch = (
+            args.start_epoch
+            if args.start_epoch is not None
+            else int(meta.get("epoch") or 0)
+        )
+        start_epoch = max(0, min(start_epoch, args.epochs))
+        if meta.get("mean_loss") is not None:
+            best_loss = float(meta["mean_loss"])
+        print(
+            f"resume={resume_path} start_epoch={start_epoch}/{args.epochs} "
+            f"best_loss={best_loss:.6f} vocab={len(token_to_idx)}"
         )
     else:
-        sequence, token_to_idx, idx_to_token = text_to_seq(text_sample)
+        if level == "word":
+            sequence, token_to_idx, idx_to_token = text_to_word_seq(
+                text_sample, min_freq=args.min_freq, whitelist=whitelist
+            )
+        else:
+            sequence, token_to_idx, idx_to_token = text_to_seq(text_sample)
 
-    model = TextRNN(
-        input_size=len(idx_to_token),
-        hidden_size=args.hidden_size,
-        embedding_size=args.embedding_size,
-        n_layers=args.n_layers,
-    ).to(device)
-    if level == "word" and args.init_navec:
-        if not Path(args.navec_weights).is_file():
-            raise FileNotFoundError(args.navec_weights)
-        stats = init_embedding_from_navec(
-            model.encoder,
-            token_to_idx,
-            tokenizer_path=args.navec_tokenizer,
-            weights_path=args.navec_weights,
-        )
-        print(
-            f"navec_init filled={stats['filled']} skipped={stats['skipped']} "
-            f"dim={stats['source_dim']}->{stats['target_dim']}"
-        )
+        model = TextRNN(
+            input_size=len(idx_to_token),
+            hidden_size=args.hidden_size,
+            embedding_size=args.embedding_size,
+            n_layers=args.n_layers,
+        ).to(device)
+        if level == "word" and args.init_navec:
+            if not Path(args.navec_weights).is_file():
+                raise FileNotFoundError(args.navec_weights)
+            stats = init_embedding_from_navec(
+                model.encoder,
+                token_to_idx,
+                tokenizer_path=args.navec_tokenizer,
+                weights_path=args.navec_weights,
+            )
+            print(
+                f"navec_init filled={stats['filled']} skipped={stats['skipped']} "
+                f"dim={stats['source_dim']}->{stats['target_dim']}"
+            )
+
     n_params = sum(p.numel() for p in model.parameters())
     print(
         f"level={level} device={device} text_chars={len(text_sample)} "
@@ -132,14 +175,26 @@ def main():
         f"seq={seq_len} bptt={bptt} params={n_params}"
     )
 
+    if start_epoch >= args.epochs:
+        save_model(
+            out,
+            model,
+            token_to_idx,
+            idx_to_token,
+            epoch=args.epochs,
+            mean_loss=best_loss if best_loss < float("inf") else None,
+            level=level,
+        )
+        print(f"done (already at epochs), model={out} best_loss={best_loss:.6f}")
+        return
+
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, amsgrad=True)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
 
     loss_avg = []
-    best_loss = float("inf")
     bptt = max(1, int(bptt))
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         model.train()
         train, target = get_batch(sequence, seq_len=seq_len, batch_size=args.batch_size)
         train = train.permute(1, 0, 2).to(device)
@@ -195,7 +250,7 @@ def main():
         token_to_idx,
         idx_to_token,
         epoch=args.epochs,
-        mean_loss=best_loss,
+        mean_loss=best_loss if best_loss < float("inf") else None,
         level=level,
     )
     print(f"done, model={out} best_loss={best_loss:.6f}")

@@ -1,11 +1,12 @@
 import asyncio
 import json
+import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from core.bus.routing import BOT_KINDS, WORKER_KINDS
+from core.bus.routing import BOT_KINDS, WORKER_KINDS, resolve_worker_kind
 
 MAX_PAYLOAD_BYTES = 12 * 1024 * 1024
 MAX_QUEUED_JOBS = 64
@@ -14,6 +15,42 @@ MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 WAIT_STATUSES = ("queued", "assigned", "running")
 ACTIVE_STATUSES = ("queued", "assigned", "running")
 TERMINAL_STATUSES = ("done", "error")
+
+# Coarse fallbacks when bot.db has no recent done timings for a worker_kind.
+DEFAULT_DURATION_SEC = {
+    "text_lstm": 20,
+    "text_lstm_word": 25,
+    "text_transformer": 30,
+    "text_gpt": 40,
+    "text_deepseek": 45,
+    "text_bert_gen": 60,
+    "mood": 5,
+    "pic_still": 15,
+    "pic_video": 90,
+}
+FALLBACK_DURATION_SEC = 25
+AVG_DURATION_SAMPLE = 20
+
+
+def estimate_wait_seconds(ahead: int, avg_sec: float) -> int:
+    """ETA until this job finishes: jobs ahead (incl. running) + own job."""
+    ahead = max(0, int(ahead))
+    avg = max(1.0, float(avg_sec))
+    return max(1, int(round((ahead + 1) * avg)))
+
+
+def format_eta_ru(sec: int) -> str:
+    sec = max(1, int(sec))
+    if sec < 60:
+        return f"~{sec} сек"
+    minutes = max(1, int(round(sec / 60.0)))
+    if minutes < 60:
+        return f"~{minutes} мин"
+    hours = minutes // 60
+    rem = minutes % 60
+    if rem:
+        return f"~{hours} ч {rem} мин"
+    return f"~{hours} ч"
 
 
 class ActiveJobError(Exception):
@@ -30,6 +67,31 @@ class QueueFullError(Exception):
 
 def _utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def _pid_alive(pid) -> bool:
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetLastError(0)
+        handle = kernel32.OpenProcess(0x1000, False, pid)
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        # ACCESS_DENIED (5): process exists but we cannot open it
+        return kernel32.GetLastError() == 5
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
 
 
 class JobStore:
@@ -254,8 +316,30 @@ class JobStore:
             finally:
                 conn.close()
 
+    def clear_meta(self, key: str) -> None:
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute("DELETE FROM worker_meta WHERE key = ?", (key,))
+                conn.commit()
+            finally:
+                conn.close()
+
     def worker_online(self, worker_kind: str) -> bool:
-        return self.get_meta(f"worker:{worker_kind}") is not None
+        key = f"worker:{worker_kind}"
+        raw = self.get_meta(key)
+        if raw is None:
+            return False
+        try:
+            meta = json.loads(raw)
+        except json.JSONDecodeError:
+            self.clear_meta(key)
+            return False
+        pid = meta.get("pid") if isinstance(meta, dict) else None
+        if not _pid_alive(pid):
+            self.clear_meta(key)
+            return False
+        return True
 
     def get_worker_models(self) -> dict | None:
         mapping = {
@@ -372,6 +456,99 @@ class JobStore:
                 return int(ahead["c"]) + 1
             finally:
                 conn.close()
+
+    def _resolve_row_worker_kind(self, kind: str, worker_kind: str | None, payload_raw: str) -> str | None:
+        if worker_kind:
+            return str(worker_kind)
+        try:
+            payload = json.loads(payload_raw)
+            return resolve_worker_kind(kind, payload)
+        except Exception:
+            return None
+
+    def avg_job_duration_sec(self, worker_kind: str, limit: int = AVG_DURATION_SAMPLE) -> float | None:
+        limit = max(1, int(limit))
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT started_at, finished_at FROM jobs
+                    WHERE status = 'done'
+                      AND worker_kind = ?
+                      AND started_at IS NOT NULL
+                      AND finished_at IS NOT NULL
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (worker_kind, limit),
+                ).fetchall()
+            finally:
+                conn.close()
+        durations = []
+        for row in rows:
+            try:
+                started = datetime.fromisoformat(str(row["started_at"]))
+                finished = datetime.fromisoformat(str(row["finished_at"]))
+                sec = (finished - started).total_seconds()
+            except (TypeError, ValueError):
+                continue
+            if 0.2 <= sec <= 3600:
+                durations.append(sec)
+        if not durations:
+            return None
+        return float(sum(durations) / len(durations))
+
+    def jobs_ahead_for_worker(self, job_id: int, worker_kind: str) -> int:
+        """Active jobs for the same worker_kind that are ahead of job_id (FIFO)."""
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    """
+                    SELECT status, created_at FROM jobs WHERE id = ?
+                    """,
+                    (job_id,),
+                ).fetchone()
+                if row is None or row["status"] not in ACTIVE_STATUSES:
+                    return 0
+                created_at = row["created_at"]
+                rows = conn.execute(
+                    """
+                    SELECT id, kind, worker_kind, payload FROM jobs
+                    WHERE status IN ('queued', 'assigned', 'running')
+                      AND (created_at < ? OR (created_at = ? AND id < ?))
+                    ORDER BY created_at ASC, id ASC
+                    """,
+                    (created_at, created_at, job_id),
+                ).fetchall()
+            finally:
+                conn.close()
+        ahead = 0
+        for prev in rows:
+            wk = self._resolve_row_worker_kind(
+                prev["kind"], prev["worker_kind"], prev["payload"]
+            )
+            if wk == worker_kind:
+                ahead += 1
+        return ahead
+
+    def estimate_queue_wait(self, job_id: int, worker_kind: str) -> dict:
+        ahead = self.jobs_ahead_for_worker(job_id, worker_kind)
+        measured = self.avg_job_duration_sec(worker_kind)
+        avg_sec = measured if measured is not None else float(
+            DEFAULT_DURATION_SEC.get(worker_kind, FALLBACK_DURATION_SEC)
+        )
+        eta_sec = estimate_wait_seconds(ahead, avg_sec)
+        return {
+            "job_id": job_id,
+            "worker_kind": worker_kind,
+            "ahead": ahead,
+            "position": ahead + 1,
+            "avg_sec": avg_sec,
+            "eta_sec": eta_sec,
+            "avg_from_history": measured is not None,
+        }
 
     def route_one(self, resolve_fn) -> bool:
         with self._lock:

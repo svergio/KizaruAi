@@ -71,14 +71,30 @@ class GPTBlock(nn.Module):
 
 
 class _CharLM(nn.Module):
-    def __init__(self, vocab_size, d_model, n_layers, n_heads, block_size, dropout, block_cls):
+    def __init__(
+        self,
+        vocab_size,
+        d_model,
+        n_layers,
+        n_heads,
+        block_size,
+        dropout,
+        block_cls,
+        embedding_size=None,
+    ):
         super().__init__()
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.block_size = block_size
-        self.tok = nn.Embedding(vocab_size, d_model)
+        self.embedding_size = int(embedding_size or d_model)
+        self.tok = nn.Embedding(vocab_size, self.embedding_size)
+        self.emb_proj = (
+            nn.Identity()
+            if self.embedding_size == d_model
+            else nn.Linear(self.embedding_size, d_model, bias=False)
+        )
         self.pos = nn.Embedding(block_size, d_model)
         self.drop = nn.Dropout(dropout)
         self.blocks = nn.ModuleList(
@@ -93,17 +109,53 @@ class _CharLM(nn.Module):
         token_ids = token_ids[:, -self.block_size :]
         batch, steps = token_ids.shape
         positions = torch.arange(steps, device=token_ids.device)
-        x = self.drop(self.tok(token_ids) + self.pos(positions))
+        x = self.drop(self.emb_proj(self.tok(token_ids)) + self.pos(positions))
         for block in self.blocks:
             x = block(x)
         return self.head(self.ln_f(x))
 
 
 class SimpleTransformer(_CharLM):
-    def __init__(self, vocab_size, d_model=128, n_layers=4, n_heads=4, block_size=128, dropout=0.1):
-        super().__init__(vocab_size, d_model, n_layers, n_heads, block_size, dropout, VaswaniBlock)
+    def __init__(
+        self,
+        vocab_size,
+        d_model=128,
+        n_layers=4,
+        n_heads=4,
+        block_size=128,
+        dropout=0.1,
+        embedding_size=None,
+    ):
+        super().__init__(
+            vocab_size,
+            d_model,
+            n_layers,
+            n_heads,
+            block_size,
+            dropout,
+            VaswaniBlock,
+            embedding_size=embedding_size,
+        )
 
 
 class MiniGPT(_CharLM):
-    def __init__(self, vocab_size, d_model=128, n_layers=4, n_heads=4, block_size=128, dropout=0.1):
-        super().__init__(vocab_size, d_model, n_layers, n_heads, block_size, dropout, GPTBlock)
+    def __init__(
+        self,
+        vocab_size,
+        d_model=128,
+        n_layers=4,
+        n_heads=4,
+        block_size=128,
+        dropout=0.1,
+        embedding_size=None,
+    ):
+        super().__init__(
+            vocab_size,
+            d_model,
+            n_layers,
+            n_heads,
+            block_size,
+            dropout,
+            GPTBlock,
+            embedding_size=embedding_size,
+        )

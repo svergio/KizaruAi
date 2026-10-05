@@ -14,6 +14,8 @@ from core.bus.queue import (
     JobStore,
     PayloadTooLargeError,
     QueueFullError,
+    estimate_wait_seconds,
+    format_eta_ru,
     poll_until_done,
 )
 from core.bus.routing import resolve_worker_kind
@@ -247,6 +249,26 @@ class QueueTests(unittest.IsolatedAsyncioTestCase):
         row = store.get_job(1)
         self.assertEqual(row["status"], "assigned")
         self.assertEqual(row["worker_kind"], "text_lstm")
+
+    def test_estimate_wait_seconds_and_eta_ru(self):
+        self.assertEqual(estimate_wait_seconds(0, 10), 10)
+        self.assertEqual(estimate_wait_seconds(2, 10), 30)
+        self.assertEqual(format_eta_ru(45), "~45 сек")
+        self.assertEqual(format_eta_ru(90), "~2 мин")
+
+    def test_jobs_ahead_and_queue_eta(self):
+        store = JobStore(Path(self.tmp.name) / "eta.db")
+        j1 = store.enqueue("a", "text", {"model": "lstm", "n": 1})
+        j2 = store.enqueue("b", "text", {"model": "lstm", "n": 2})
+        j_mood = store.enqueue("c", "mood", {"source": "x"})
+        self.assertEqual(store.jobs_ahead_for_worker(j1, "text_lstm"), 0)
+        self.assertEqual(store.jobs_ahead_for_worker(j2, "text_lstm"), 1)
+        self.assertEqual(store.jobs_ahead_for_worker(j_mood, "mood"), 0)
+        info = store.estimate_queue_wait(j2, "text_lstm")
+        self.assertEqual(info["ahead"], 1)
+        self.assertEqual(info["position"], 2)
+        self.assertGreaterEqual(info["eta_sec"], 1)
+        self.assertFalse(info["avg_from_history"])
 
 
 if __name__ == "__main__":
