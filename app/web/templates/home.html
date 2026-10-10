@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block crumbs %}{% endblock %}
+{% block content %}
+<h1 class="page-title">Главная</h1>
+{% if not db_ok %}
+<p class="error-panel" id="db-missing">без БД: файл не найден</p>
+{% endif %}
+<p class="muted" id="home-stamp">Загрузка…</p>
+
+<div id="home-health" class="home-health-strip" aria-label="Пайплайн, хост и Discord"></div>
+
+<section>
+  <h2>Кластер</h2>
+  <div id="cluster" class="cluster"></div>
+</section>
+
+<section class="home-metrics-grid">
+  <div>
+    <h2>KPI</h2>
+    <section class="grid-kpi" id="home-kpi"></section>
+    <div id="chart-home-status" class="chart-box chart-status" data-empty="нет задач"></div>
+  </div>
+  <div>
+    <h2>Активность задач</h2>
+    <div id="chart-home-heatmap" class="chart-box chart-heatmap" data-empty="нет данных"></div>
+  </div>
+</section>
+
+<section>
+  <h2>Нагрузка</h2>
+  <div id="home-bars" class="bars"></div>
+</section>
+
+<section>
+  <h2>Динамика задач</h2>
+  <div class="ts-range" id="home-ts-range" role="tablist" aria-label="Диапазон графика">
+    <button type="button" class="chip active" data-range="24h" role="tab" aria-selected="true">24ч</button>
+    <button type="button" class="chip" data-range="7d" role="tab" aria-selected="false">7д</button>
+  </div>
+  <div id="chart-home-ts" class="chart-box chart-ts" data-empty="нет данных"></div>
+</section>
+
+<section>
+  <h2>Аудитория бота</h2>
+  <div id="chart-home-audience" class="chart-box chart-audience" data-empty="нет данных"></div>
+</section>
+
+<div id="chart-home-spark" class="visually-hidden" aria-hidden="true" data-empty="нет данных"></div>
+
+<section>
+  <h2>Хранение</h2>
+  <div id="home-storage" class="storage-bars-wrap" data-empty="нет данных"></div>
+</section>
+
+<section>
+  <h2>Последние задачи</h2>
+  <div id="tbl-home-jobs" class="job-log"></div>
+</section>
+{% endblock %}

@@ -11,12 +11,32 @@ from core.corpus.lyrics import clean_lyrics, prepare_corpus_text
 from core.corpus.genius import cache_path, fetch_artist, load_cached_songs
 
 DEFAULT_OUT = Path("data/corpus/kizaru_lyrics.txt")
+ARTIST_POOLS_DIR = Path("training/artist_pools")
 HF_DATASET_URL = (
     "https://huggingface.co/datasets/huggingartists/{artist}/resolve/main/datasets.json"
 )
 FALLBACK_CSV = Path("data/corpus/messages_fallback.csv")
 
-GENIUS_ARTISTS = (
+
+def load_artist_pools(pools_dir=None):
+    root = Path(pools_dir) if pools_dir else ARTIST_POOLS_DIR
+    if not root.is_dir():
+        return ()
+    seen = set()
+    ordered = []
+    for path in sorted(root.glob("*.txt")):
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line in seen:
+                continue
+            seen.add(line)
+            ordered.append(line)
+    return tuple(ordered)
+
+
+_BUILTIN_GENIUS_ARTISTS = (
     'Oxxxymiron',
     'Noize-MC',
     'Basta',
@@ -306,6 +326,9 @@ GENIUS_ARTISTS = (
     'Klava-coca',
     'Atlantida-project',
 )
+
+_POOL_ARTISTS = load_artist_pools()
+GENIUS_ARTISTS = _POOL_ARTISTS if _POOL_ARTISTS else _BUILTIN_GENIUS_ARTISTS
 
 CIS_ARTISTS = (
     "kizaru",

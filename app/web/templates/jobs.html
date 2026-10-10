@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block crumbs %}<a href="/">Admin</a> / <span>Задачи</span>{% endblock %}
+{% block content %}
+<h1>Задачи</h1>
+<section>
+  <h2>Активная очередь</h2>
+  <div class="pipeline" id="queue-pipeline">
+    <div class="pipe-box" id="pipe-clients" title="Discord, CLI">
+      <div class="v">—</div>
+      <div class="l">Клиенты</div>
+    </div>
+    <div class="pipe-arrow" aria-hidden="true">›</div>
+    <div class="pipe-box" id="pipe-bus" title="в очереди">
+      <div class="v">—</div>
+      <div class="l">Шина</div>
+    </div>
+    <div class="pipe-arrow" aria-hidden="true">›</div>
+    <div class="pipe-box" id="pipe-orch" title="назначена">
+      <div class="v">—</div>
+      <div class="l">Оркестратор</div>
+    </div>
+    <div class="pipe-arrow" aria-hidden="true">›</div>
+    <div class="pipe-box" id="pipe-workers" title="выполняется">
+      <div class="v">—</div>
+      <div class="l">Воркеры</div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="data" id="tbl-queue-page">
+      <thead><tr>
+        <th>id</th><th>Кто</th><th>kind</th><th>worker</th><th>Статус</th><th>Создана</th><th>Старт</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+<section>
+  <h2>История и фильтры</h2>
+<div class="filters" id="status-chips">
+  <a class="chip{% if not filter_status %} active{% endif %}" data-status="" href="/jobs">все</a>
+  {% for k, v in status_map.items() %}
+  <a class="chip{% if filter_status == k %} active{% endif %}" data-status="{{ k }}" href="/jobs?status={{ k }}&amp;page=1">{{ v.label }}</a>
+  {% endfor %}
+</div>
+<form class="filters" id="jobs-filters">
+  <label>status <input name="status" list="status-list" value="{{ filter_status or '' }}"></label>
+  <label>kind <input name="kind" list="kind-list" value="{{ filter_kind or '' }}"></label>
+  <label>user <input name="user" value="{{ filter_user or '' }}"></label>
+  <button type="submit">Фильтр</button>
+</form>
+<datalist id="status-list">
+  {% for k, v in status_map.items() %}<option value="{{ k }}">{{ v.label }}</option>{% endfor %}
+</datalist>
+<datalist id="kind-list">
+  {% for k, v in kind_map.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+</datalist>
+<div class="table-wrap">
+  <table class="data sortable" id="tbl-jobs">
+    <thead><tr>
+      <th data-key="id">id</th>
+      <th data-key="user">Кто</th>
+      <th data-key="kind">kind</th>
+      <th data-key="worker_kind">worker</th>
+      <th data-key="status">Статус</th>
+      <th data-key="created_at">Создана</th>
+      <th>Превью</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<div class="pager" id="jobs-pager"><span id="jobs-page-num">{{ filter_page }}</span></div>
+<div id="chart-jobs-gantt" class="chart-box" data-empty="нет данных"></div>
+</section>
+{% endblock %}

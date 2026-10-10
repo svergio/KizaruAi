@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block crumbs %}<a href="/">Admin</a> / <span>Логи</span>{% endblock %}
+{% block content %}
+<h1>Логи</h1>
+<form class="filters" id="logs-filters">
+  <label>service <input name="service" type="search" autocomplete="off" spellcheck="false" placeholder="admin.out"></label>
+  <label>level
+    <select name="level">
+      <option value="">все</option>
+      <option value="DEBUG">DEBUG</option>
+      <option value="INFO">INFO</option>
+      <option value="WARNING">WARNING</option>
+      <option value="ERROR">ERROR</option>
+    </select>
+  </label>
+  <label>поиск <input id="logs-search" type="search" autocomplete="off" spellcheck="false" placeholder="текст в строке"></label>
+  <label class="logs-wrap-label"><input type="checkbox" id="logs-wrap" checked> перенос строк</label>
+  <button type="submit">Фильтр API</button>
+</form>
+<p class="muted" id="logs-meta" aria-live="polite"></p>
+<div class="log-view log-wrap" id="log-view">
+  <div class="log-lines mono" id="log-lines">Загрузка…</div>
+</div>
+{% endblock %}

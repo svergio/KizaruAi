@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block crumbs %}<a href="/">Admin</a> / <span>Сервисы</span>{% endblock %}
+{% block content %}
+<h1>Сервисы</h1>
+{% if not db_ok %}
+<p class="error-panel" id="db-missing">без БД: файл не найден</p>
+{% endif %}
+<p class="muted" id="services-stamp">Загрузка…</p>
+<p class="muted" id="services-ops-note"></p>
+<p id="services-summary" class="muted"></p>
+<div class="table-wrap">
+  <table class="data" id="tbl-services">
+    <thead><tr>
+      <th>●</th><th>сервис</th><th>module</th><th>PID</th><th>RSS</th><th>meta</th><th>логи</th><th>ручной запуск</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<section>
+  <h2>Деплой всего бота</h2>
+  <p class="muted">См. <code>docs/runbook.md</code> (раздел «Деплой бота»). PID-лист: <code id="services-pid-file">var/logs/start_all_pids.txt</code></p>
+  <pre class="mono" id="services-deploy-cmd"></pre>
+</section>
+{% endblock %}

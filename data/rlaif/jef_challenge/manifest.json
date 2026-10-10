@@ -1,0 +1,166 @@
+{
+  "seed": 1,
+  "per_category": 400,
+  "counts": {
+    "pos_couplet": 400,
+    "pos_quatrain": 400,
+    "neg_shift": 400,
+    "neg_near_rhyme": 400,
+    "neg_unrhymed": 400,
+    "trap_repeat_word": 400,
+    "trap_yeah": 400,
+    "trap_english": 400,
+    "trap_tags": 400,
+    "trap_fragment": 400,
+    "trap_prompt_copy": 400
+  },
+  "available": {
+    "pos_couplet": 4140,
+    "pos_quatrain": 466,
+    "neg_shift": 9920,
+    "neg_near_rhyme": 4462,
+    "neg_unrhymed": 10036,
+    "trap_repeat_word": 10034,
+    "trap_yeah": 11515,
+    "trap_english": 400,
+    "trap_tags": 11513,
+    "trap_fragment": 8898,
+    "trap_prompt_copy": 11363
+  },
+  "total": 4400,
+  "songs": {
+    "mixed": 5019,
+    "dupe": 67816,
+    "ru_not_rap": 11143,
+    "ru_excluded_jef": 253,
+    "en_excluded_jef": 41,
+    "ru_songs": 6000,
+    "en_songs": 1500
+  },
+  "corpus": "E:\\Pet_Projects\\KizaruAi\\data\\dataset\\lyrics.jsonl",
+  "jef_dir": "E:\\Pet_Projects\\KizaruAi\\data\\rlaif\\jef",
+  "rap_pool_size": 332,
+  "artists_top": [
+    [
+      "slava-kpss",
+      124
+    ],
+    [
+      "ЗАМАЙ (ZAMAY)",
+      106
+    ],
+    [
+      "Metox",
+      97
+    ],
+    [
+      "STED.D",
+      85
+    ],
+    [
+      "Black Star Inc.",
+      81
+    ],
+    [
+      "Паша Техник (Pasha Technique)",
+      72
+    ],
+    [
+      "pyrokinesis",
+      68
+    ],
+    [
+      "aikko",
+      67
+    ],
+    [
+      "CAKEBOY",
+      59
+    ],
+    [
+      "kizaru",
+      57
+    ],
+    [
+      "МЕЗЗА (MEZZA)",
+      56
+    ],
+    [
+      "Баста (Basta)",
+      55
+    ],
+    [
+      "Loc-Dog",
+      55
+    ],
+    [
+      "Рем Дигга (Rem Digga)",
+      53
+    ],
+    [
+      "ST1M",
+      51
+    ],
+    [
+      "Кирпичи (Kirpichi)",
+      50
+    ],
+    [
+      "MAYOT",
+      49
+    ],
+    [
+      "Чатти (4atty)",
+      48
+    ],
+    [
+      "Гарри Топор (Garri Topor)",
+      46
+    ],
+    [
+      "KREC",
+      42
+    ],
+    [
+      "25-17",
+      41
+    ],
+    [
+      "pharaoh",
+      41
+    ],
+    [
+      "АК-47 (AK-47)",
+      41
+    ],
+    [
+      "GSPD",
+      41
+    ],
+    [
+      "Bad Balance",
+      40
+    ],
+    [
+      "ATL",
+      40
+    ],
+    [
+      "L’One",
+      37
+    ],
+    [
+      "scriptonite",
+      36
+    ],
+    [
+      "Зараза (Zaraza)",
+      35
+    ],
+    [
+      "Loqiemean",
+      32
+    ]
+  ],
+  "short": []
+}

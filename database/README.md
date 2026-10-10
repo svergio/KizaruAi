@@ -8,7 +8,9 @@
 | Маршрутизация `worker_kind` | `core/bus/routing.py`, `app/orchestrator/` |
 | Discord / CLI payload | `core/bus/handlers.py`, `app/discord/`, `app/cli/generate.py`, `app/cli/image.py` |
 
-Обзор процессов и статусов (`queued` -> … -> `done`): [docs/architecture.md](../docs/architecture.md). Запуск: [docs/runbook.md](../docs/runbook.md).
+Таблица `jobs`: помимо базовых полей — `worker_kind`, `worker_pid`, `lease_until`, `attempts` (DEFAULT 0), `result`. Терминальные статусы: `done`, `error`, `cancelled`. `MAX_QUEUED_JOBS` считает `queued`+`assigned`. После `MAX_RUNTIME_SEC[kind]` running → `error` (`timeout`). `complete`/`fail` только при `status=running` и своём `worker_pid`.
+
+Обзор процессов и статусов: [docs/architecture.md](../docs/architecture.md). Запуск: [docs/runbook.md](../docs/runbook.md).
 
 Корпус и импорт/экспорт pic — в `data/` ([data/README.md](../data/README.md)), не в этой папке. Здесь только описание БД.
 

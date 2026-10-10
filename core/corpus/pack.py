@@ -114,7 +114,7 @@ def assign_splits(rows, train_ratio=0.98, seed=1):
     return out
 
 
-def write_dataset(rows, out_dir: Path, corpus_dir: Path):
+def write_dataset(rows, out_dir: Path, corpus_dir: Path, train_ratio=0.98, seed=1):
     out_dir.mkdir(parents=True, exist_ok=True)
     main_path = out_dir / "lyrics.jsonl"
     train_path = out_dir / "train.jsonl"
@@ -149,12 +149,13 @@ def write_dataset(rows, out_dir: Path, corpus_dir: Path):
         by_artist[key] = by_artist.get(key, 0) + 1
 
     genius_files = list(corpus_dir.glob(f"{GENIUS_PREFIX}*.json"))
+    ratio_pct = int(round(train_ratio * 100))
     manifest = {
         "rows_total": len(rows),
         "train": len(train_rows),
         "valid": len(valid_rows),
-        "split_ratio": "98/2",
-        "split_seed": 1,
+        "split_ratio": f"{ratio_pct}/{100 - ratio_pct}",
+        "split_seed": seed,
         "by_source": by_source,
         "by_artist": by_artist,
         "genius_cache_files": len(genius_files),
@@ -179,5 +180,7 @@ def pack_corpus(corpus_dir=None, out_dir=None, train_ratio=0.98, seed=1):
     if not rows:
         raise ValueError(f"No lyric rows found under {corpus_dir}")
     rows = assign_splits(rows, train_ratio=train_ratio, seed=seed)
-    main_path, manifest = write_dataset(rows, out_dir, corpus_dir)
+    main_path, manifest = write_dataset(
+        rows, out_dir, corpus_dir, train_ratio=train_ratio, seed=seed
+    )
     return main_path, manifest

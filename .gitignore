@@ -55,3 +55,8 @@ experiments/**/_coord_note.txt
 experiments/**/_mute_note.txt
 experiments/**/_status.txt
 
+
+# large local mixes (GitHub 100MB limit)
+data/mixes/**/train.jsonl
+data/mixes/**/train.txt
+

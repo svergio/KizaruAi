@@ -21,7 +21,7 @@
 4. **Не спамить `notify_on_output`** на длинных трейнах — иначе координатор тонет в шуме; статус через лог/score файлы.
 5. **Слоты жёсткие** — char остаётся char, word остаётся word; transformer/gpt этой ночью без `--level word`.
 
-## KB-ready промпт-паттерны (чеклист)
+## Промпт-паттерны (чеклист)
 
 Цитаты/формулировки, которые стоит копировать в новые ночные промпты:
 
@@ -45,14 +45,20 @@
 
 Self-training (один агент крутит одну модель всю ночь) оставлять для разведки архитектуры; для слотов бота — **дуэли команд**.
 
+## Cursor: пул vs design loop
+
+Расширение для пайплайнов (не только ночные дуэли): роли A0–A4, GPU mutex, gate Jeff → SFT → RL, и цикл User↔Agent (уточнения → план → approve → фазы) — в [cursor-training-workflows.md](cursor-training-workflows.md).
+
+Паттерны выше (mutex, decompose roles, Plan → Build approve, no mega-agent) остаются каноном; sibling doc привязывает их к Jev/DeepSeek-фазам и к сессионному design loop.
+
 ## Как поднимать снова
 
-См. план ночного турнира (локальный plan-файл) и [night-contest.md](night-contest.md). Старт обучения после реорганизации:
+См. [night-contest.md](night-contest.md). Команды обучения и бенча (из корня проекта):
 
 ```bash
-python train.py --level char --corpus experiments/shared/train.txt --out checkpoints/kizaru.pt
-python train_lm.py --arch transformer --level char --corpus experiments/shared/train.txt --out checkpoints/transformer.pt
-python experiments/bench.py --model path/to/model.pt ...
+python -m training.train --level char --corpus experiments/shared/train.txt --out checkpoints/kizaru.pt
+python -m training.train_lm --arch transformer --level word --corpus experiments/shared/train.txt --out checkpoints/transformer.pt
+python experiments/bench.py checkpoints/transformer.pt
 ```
 
-Корневые `train.py` / `train_lm.py` — shim → `training/`.
+Все флаги — [../training.md](../training.md).

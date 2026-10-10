@@ -3,10 +3,12 @@
 | Путь | Назначение |
 |------|------------|
 | `import/` | Картинки и видео для pic CLI (gitignore) |
-| `export/<stem>/pik/` | PNG от `still --mode line` и GIF от `anim --mode line` (gitignore). `still --mode simple` файл не пишет, сетка идёт в stdout |
+| `export/<stem>/pik/` | PNG от `still --mode line\|render\|details` и GIF от `anim` (gitignore). `still --mode simple` пишет файл только с `--out`, иначе сетка идёт в stdout. Остальные папки в `export/` — выгрузки исследовательских скриптов из `notebooks/research/` |
 | `corpus/` | **gitignore:** `kizaru_lyrics.txt`, `genius_*.json`, legacy HF, `messages_fallback.csv` — создаётся после `prepare_data` / orchestrator |
-| `dataset/` | `lyrics.jsonl` и сплиты от `pack_lyrics_dataset.py` (gitignore, кроме `dataset/README.md`, если он есть) |
-| `embeddings/navec_hudlit/` | Natasha Navec (HF) word vocab + 300d weights for Word LSTM whitelist / init; see [docs/research/embeddings-vocab.md](../docs/research/embeddings-vocab.md) |
+| `dataset/` | `lyrics.jsonl` и сплиты от `python -m training.pack_lyrics_dataset` (gitignore, кроме `dataset/README.md`) |
+| `corpus/poetry/` | стихи и стиховые датасеты со схемой рифмы (`download_poetry`, `import_verse_schema`); см. [docs/training.md](../docs/training.md) |
+| `rlaif/jef/` | датасет классификатора рифмы JEF (`build_jef_dataset`) |
+| `embeddings/navec_hudlit/` | Natasha Navec (HF): word-словарь + веса 300d для whitelist / инициализации; см. [docs/research/embeddings-vocab.md](../docs/research/embeddings-vocab.md) |
 | `logs/` | Логи обучения (gitignore) |
 | `bot.db` | SQLite-шина бота (gitignore); см. [database/README.md](../database/README.md) |
 
@@ -16,25 +18,27 @@
 
 ### Корпус (Genius)
 
-Пул загрузки — `GENIUS_ARTISTS` в `prepare_data.py` (98 slug). Параллельно: `python genius_orchestrator.py --workers 5` (максимум пять воркеров, один артист на воркер, свой `genius_<slug>.json`, корпус пишет оркестратор в конце). Один поток: `python prepare_data.py --source genius`. Пока прогон не закончился, `kizaru_lyrics.txt` ещё не этот пул. `dataset/lyrics.jsonl` сам от этого не обновляется: его собирает отдельный `pack_lyrics_dataset.py`, и файл может пока быть старой HF-сборкой. Чекпоинты на этих 98 артистах не обучены. Обучение не запускать, пока датасет не подготовлен.
+Пул загрузки — файлы `training/artist_pools/*.txt` (если папки нет — встроенный список в `training/prepare_data.py`). Параллельно: `python -m training.genius_orchestrator --workers 5`. Один поток: `python -m training.prepare_data --source genius`.
+
+Актуально после сборки **2026-10-05**: `data/corpus/kizaru_lyrics.txt` (~70M символов), фильтр `LM_STREAM` (пустых строк нет). Shared splits: `experiments/shared/train.txt` / `test.txt`. Текстовые чекпоинты на этом корпусе уже переобучены (word vocab 99868).
 
 Загрузка: публичный API Genius и HTML страниц песен (около 1 запроса в секунду). При `GENIUS_ACCESS_TOKEN` и установленном `lyricsgenius` поиск идёт через токен, текст всё равно со страниц. Пропуски (404, артист не найден) пишутся в stderr.
 
 Фильтр: `strip_genius_annotations` → символы → `core/corpus/clean.py` (`LM_STREAM`); см. [../docs/corpus-cleaning.md](../docs/corpus-cleaning.md).
 
-Кэш с песнями — файлы `genius_<Slug>.json`. Имена slug смотри в `GENIUS_ARTISTS`, не в чекпоинтах.
+Кэш с песнями — файлы `genius_<Slug>.json`. Имена slug смотри в `training/artist_pools/*.txt`.
 
 Лирика не под MIT — см. [LICENSE](../LICENSE). На HF и Kaggle её не выкладывать.
 
-Словарь line-режима: `kizaru/assets/line_patterns.json`.
+Словарь line-режима: `core/image/assets/line_patterns.json`.
 
 ### Pic (дефолты CLI)
 
 Pic — символьная сетка, не пиксельный фильтр. CLI только ставит заявку.
 
-- `still --mode line` → PNG в `export/<stem>/pik/line_s<scale>.png`. Воркер рисует с upscale в коде (флага `--upscale` нет). Ширина = `cells * 8`. Дефолт `--cells 320` даёт 2560 px. `--scale` (дефолт 2) — сколько px источника на квадрант smile.
-- `still --mode simple` → текст в stdout. `--cells` и `--scale` на эту заявку не влияют.
-- `anim --mode line` → GIF в `export/<stem>/pik/`. `anim --mode simple` завершается с кодом 1.
+- `still --mode line` → PNG в `export/<stem>/pik/line_s<scale>.png`. Upscale включён по умолчанию, выключается `--no-upscale`. Ширина = `cells * 8`. Дефолт `--cells 320` даёт 2560 px. `--scale` (дефолт 2) — сколько px источника на квадрант smile.
+- `still --mode simple` → текст в stdout (с `--out` — PNG).
+- `anim --mode line|render|details` → GIF в `export/<stem>/pik/`. `anim --mode simple` завершается с кодом 1.
 - Отдельных флагов `--audio`, `--mp4`, `--gif` нет.
 
 Пайплайн бота и размеры — в [docs/runbook.md](../docs/runbook.md); обзор — [README.md](../README.md).

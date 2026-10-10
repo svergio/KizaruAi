@@ -1,0 +1,69 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>KizaruAi Admin — Главная (мокап)</title>
+<style>
+:root{--bg:#f5f6f8;--panel:#fff;--border:#d9dde3;--text:#1f2328;--muted:#6b7280;--link:#1a6fb5;--header:#2b3138;--warn:#b45309;--warn-bg:#fef3c7;--ok:#166534;--err:#991b1b}
+body{margin:0;font:13px/1.4 system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--text)}
+.top{background:var(--header);color:#e6e8eb;height:40px;display:flex;align-items:center;padding:0 16px;gap:16px}
+.top h1{font-size:18px;margin:0}
+.wrap{padding:16px}
+.cluster{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.node{flex:1 1 120px;background:var(--panel);border:1px solid var(--border);border-radius:3px;padding:8px 10px;border-left:3px solid var(--ok)}
+.node.warn{border-left-color:var(--warn);background:var(--warn-bg)}
+.node .n{font-weight:600}.node .m{color:var(--muted);font-size:11px;margin-top:4px}
+.kpi{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:12px 0}
+.kpi div{background:var(--panel);border:1px solid var(--border);border-radius:3px;padding:8px 12px}
+.kpi .v{font-size:22px;font-weight:600;font-family:Consolas,monospace}.kpi .l{color:var(--muted);font-size:12px}
+.bar{display:grid;grid-template-columns:80px 1fr 40px;gap:8px;margin:6px 0;align-items:center}
+.track{height:10px;background:#fafbfc;border:1px solid var(--border);border-radius:3px;overflow:hidden}
+.fill{height:100%;background:var(--link)}.fill.warn{background:var(--warn)}
+.heat{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;max-width:640px}
+.heat i{display:block;height:14px;background:var(--link);opacity:.08}
+.heat i.on{opacity:.7}
+table{width:100%;border-collapse:collapse;background:var(--panel);margin-top:8px}
+th,td{border-bottom:1px solid var(--border);padding:4px 8px;text-align:left;height:28px}
+.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<header class="top"><h1>KizaruAi Admin</h1><span>Главная (мокап)</span></header>
+<main class="wrap">
+<h1>Главная</h1>
+<p class="muted">Пример цифр · Europe/Moscow</p>
+<h2>Кластер</h2>
+<div class="cluster">
+  <div class="node"><div class="n">Discord</div><div class="m">ok · ping 42 мс</div></div>
+  <div class="node"><div class="n">Оркестратор</div><div class="m">ok · pid 100</div></div>
+  <div class="node"><div class="n">Очередь + SQLite</div><div class="m">ok · bot.db</div></div>
+  <div class="node warn"><div class="n">Воркеры</div><div class="m">warn · GPU 7/9</div></div>
+  <div class="node"><div class="n">Модели</div><div class="m">ok · prod</div></div>
+</div>
+<div class="kpi">
+  <div><div class="v">3</div><div class="l">Активные</div></div>
+  <div><div class="v">128</div><div class="l">Готово 24ч</div></div>
+  <div><div class="v">2</div><div class="l">Ошибки 24ч</div></div>
+  <div><div class="v">11</div><div class="l">Активны 15м</div></div>
+  <div><div class="v">4</div><div class="l">Серверы</div></div>
+</div>
+<h2>Нагрузка</h2>
+<div class="bar"><span>Очередь</span><div class="track"><div class="fill" style="width:12%"></div></div><span>12%</span></div>
+<div class="bar"><span>CPU</span><div class="track"><div class="fill" style="width:35%"></div></div><span>35%</span></div>
+<div class="bar"><span>RAM</span><div class="track"><div class="fill warn" style="width:72%"></div></div><span>72%</span></div>
+<div class="bar"><span>GPU</span><div class="track"><div class="fill" style="width:40%"></div></div><span>40%</span></div>
+<h2>Активность</h2>
+<div class="heat">
+<script>for(let i=0;i<7*24;i++){const on=Math.random()>0.7;document.write("<i class=\""+(on?"on":"")+"\"></i>")}</script>
+</div>
+<h2>Хранение</h2>
+<p>data: 48 MiB · checkpoints: 12 GiB · var: 220 MiB</p>
+<h2>Последние задачи</h2>
+<table><thead><tr><th>id</th><th>Кто</th><th>kind</th><th>Статус</th><th>Этапы</th></tr></thead>
+<tbody>
+<tr><td>1042</td><td>1234…89</td><td>текст</td><td>готово</td><td>created › started › finished</td></tr>
+<tr><td>1041</td><td>9876…01</td><td>картинка</td><td>выполняется</td><td>created › started</td></tr>
+</tbody></table>
+</main>
+</body>
+</html>

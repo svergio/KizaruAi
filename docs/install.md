@@ -1,69 +1,83 @@
 # Первый запуск (свежий clone)
 
-После `git clone` в репозитории **нет** корпуса, логов, `bot.db`, чекпоинтов и pic-экспортов — они создаются у вас локально и перечислены в [.gitignore](../.gitignore). В git могут быть только README по `data/`, `checkpoints/.gitkeep` и (опционально) `.pt` / embeddings — см. [licensing.md](licensing.md).
+После `git clone` в репозитории **нет** корпуса, логов, `bot.db`, чекпоинтов и pic-экспортов — они создаются локально и перечислены в `.gitignore`. Что можно и нельзя публиковать — [licensing.md](licensing.md).
+
+## Требования к стенду
+
+Всё, что ниже, в проект не входит и ставится на машину отдельно.
+
+| Что | Нужно для | Обязательно? |
+|-----|-----------|--------------|
+| Windows + PowerShell | `start_all.ps1` и ops-скрипты в `var/` (используют `powershell`, `conhost`, `Get-CimInstance`) | для деплоя через `start_all.ps1` |
+| Python 3.10 | всё | да |
+| NVIDIA GPU с CUDA | обучение; инференс работает и на CPU | для обучения |
+| LLM-сервер с OpenAI-совместимым API (llama-swap или аналог), который поднимает Qwen | LLM-часть пайплайна (учитель/судья в RLAIF-цикле) | **да** — без него LLM-часть не заработает. Сейчас клиент к серверу в `core/llm/` не реализован, см. [research/rlaif-song-loop.md](research/rlaif-song-loop.md) |
+| MLflow-сервер (по умолчанию `http://127.0.0.1:5000`) | только логирование метрик обучения | нет, см. [training.md](training.md#mlflow-необязательно) |
+| `ffmpeg` и `ffprobe` в PATH | GIF / видео в pic | для `anim` и видео в `/ai pic` |
+
+Python-пакеты — все в `requirements.txt`:
+
+- `torch`, `numpy`, `discord.py`, `pillow` — бот и обучение;
+- `mlflow` — логирование метрик (сервер необязателен);
+- `transformers`, `peft`, `bitsandbytes`, `accelerate`, `scikit-learn` — JEF / RL (`training/train_jef.py`, `train_rl_deepseek.py`, `build_jef_dataset.py --with-base-jeff`);
+- `safetensors` — инициализация эмбеддингов из Navec (`--init-navec`);
+- `datasets` — выборка stihi_ru в `download_poetry.py`; `pyarrow` — `import_verse_schema.py` (poetry_form);
+- `lyricsgenius` — поиск артистов через Genius API при наличии токена;
+- `psutil` — информация о процессах в админке;
+- `flask`, `waitress` — Admin v2 (`python -m app.web`).
+
+Qwen для JEF/RL скрипты грузят через `transformers` по имени модели (`--model` / `--jeff-model`, по умолчанию `Qwen/Qwen3-4B-Instruct-2507`); можно передать локальный путь.
 
 ## 1. Окружение
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
 python -m pip install -r requirements.txt
 ```
 
-Скопируйте [.env.example](../.env.example) в `.env` и заполните по необходимости:
+На рабочей машине используется глобальный Python 3.10 без `.venv`; venv тоже подойдёт.
 
-- `DISCORD_TOKEN` — для `app.discord`
-- `GENIUS_ACCESS_TOKEN` — опционально, для загрузки корпуса через Genius API
+Скопируйте `.env.example` в `.env` и заполните:
+
+- `DISCORD_TOKEN` — для `app.discord` (без него `start_all.ps1` просто не запускает Discord);
+- `GENIUS_ACCESS_TOKEN` — опционально, для загрузки корпуса через Genius API.
+- `LOKI_URL` — опционально, URL push API Loki для JSON-логов (`core/logging_setup.py`).
 
 ## 2. Корпус (обязательно перед обучением)
 
-Целевой merged-файл после сборки: `data/corpus/kizaru_lyrics.txt` (в репозитории его нет).
+Итоговый файл: `data/corpus/kizaru_lyrics.txt` (в репозитории его нет).
 
-**Вариант A — только fallback (быстро, без Genius):** положите или сгенерируйте `data/corpus/messages_fallback.csv`, затем:
+**Вариант A — fallback без Genius:** положите `data/corpus/messages_fallback.csv`, затем:
 
 ```bash
 python -m training.prepare_data
 ```
 
-**Вариант B — Genius:** скачайте кэш `data/corpus/genius_<slug>.json`, затем соберите текст:
+**Вариант B — Genius:**
 
 ```bash
 python -m training.genius_orchestrator --workers 5
 python -m training.prepare_data --source genius-cache
 ```
 
-Подробнее: [runbook.md](runbook.md) (корпус / Genius), [corpus-cleaning.md](corpus-cleaning.md).
+Подробнее: [runbook.md](runbook.md#корпус--genius), [corpus-cleaning.md](corpus-cleaning.md).
 
-Сплиты для bench/обучения: `experiments/shared/train.txt` и `test.txt` **не в git** — их нужно пересобрать у себя из корпуса (см. `experiments/shared/README.md` и скрипты в `experiments/`).
+Сплиты для бенча `experiments/shared/train.txt` и `test.txt` в git не входят — их собирает `experiments/build_split.py` (см. `experiments/shared/README.md`).
 
-## 3. Embeddings (опционально, word LSTM)
+## 3. Эмбеддинги (опционально, word-модели)
 
 ```bash
 huggingface-cli download BorisTM/natasha_navec_hudlit_v1_12B_500K_300d_100q --local-dir data/embeddings/navec_hudlit
 ```
 
-Инструкция: [research/embeddings-vocab.md](research/embeddings-vocab.md). Каталог `.cache/` внутри embeddings не коммитится.
+Подробно: [research/embeddings-vocab.md](research/embeddings-vocab.md).
 
 ## 4. Обучение или готовые веса
 
-Либо обучите сами ([runbook.md](runbook.md)), либо положите `.pt` в `checkpoints/` (имена как в README: `kizaru.pt`, `kizaru_word.pt`, …).
+Либо обучите сами ([training.md](training.md)), либо положите `.pt` в `checkpoints/` с именами из README: `kizaru.pt`, `kizaru_word.pt`, `transformer.pt`, `gpt.pt`, `deepseek.pt`, `bert_gen.pt`, `mood.pt`.
 
 ## 5. Запуск бота
 
-SQLite-шина создаётся при первом обращении: `data/bot.db`. Логи процессов — в `var/logs/` (каталог появится при запуске).
-
-```bash
-python -m app.orchestrator --db data/bot.db
-python -m app.workers.lstm checkpoints/kizaru.pt --db data/bot.db
-python -m app.workers.lstm_word checkpoints/kizaru_word.pt --db data/bot.db
-python -m app.workers.transformer checkpoints/transformer.pt --db data/bot.db
-python -m app.workers.gpt checkpoints/gpt.pt --db data/bot.db
-python -m app.workers.deepseek checkpoints/deepseek.pt --db data/bot.db
-python -m app.workers.mood checkpoints/mood.pt --db data/bot.db
-python -m app.workers.still --db data/bot.db
-python -m app.workers.video --db data/bot.db
-python -m app.discord --db data/bot.db
-```
+Все процессы разом (Windows): `powershell -ExecutionPolicy Bypass -File .\start_all.ps1`. По одному и подробности — [runbook.md](runbook.md#деплой-бота). SQLite-шина `data/bot.db` создаётся при первом обращении, логи — в `var/logs/`.
 
 Админка: `python -m app.web` → http://127.0.0.1:8765/
 
@@ -71,9 +85,6 @@ python -m app.discord --db data/bot.db
 
 ```bash
 python -m app.cli.generate --arch lstm --start "Я" --db data/bot.db
-python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Часть тестов ожидает локальный `data/corpus/messages_fallback.csv` или чекпоинты — на пустом clone это нормально; сначала выполните шаги 2–4.
-
-Полный деплой и флаги: [runbook.md](runbook.md). Обзор бота: [../README.md](../README.md).
+Нужны запущенные оркестратор и воркер `lstm`.

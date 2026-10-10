@@ -98,6 +98,7 @@ def save_model(path, model, char_to_idx, idx_to_char, **meta):
         payload["n_heads"] = model.n_heads
         payload["block_size"] = model.block_size
         payload["embedding_size"] = getattr(model, "embedding_size", model.d_model)
+        payload["tie_weights"] = bool(getattr(model, "tie_weights", False))
         if arch == ARCH_DEEPSEEK:
             payload["kv_lora_rank"] = model.kv_lora_rank
             payload["q_lora_rank"] = model.q_lora_rank
@@ -125,6 +126,7 @@ def _build_lm(arch, vocab_size, payload):
         kwargs["kv_lora_rank"] = payload.get("kv_lora_rank")
         kwargs["q_lora_rank"] = payload.get("q_lora_rank")
         return MiniDeepSeek(**kwargs)
+    kwargs["tie_weights"] = bool(payload.get("tie_weights", False))
     if arch == ARCH_GPT:
         return MiniGPT(**kwargs)
     return SimpleTransformer(**kwargs)

@@ -1,15 +1,23 @@
 import json
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import time
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
 
 from core.corpus.genius import cache_path, fetch_artist
 
-MAX_WORKERS = 5
+MAX_WORKERS = 25
+MIN_WORKERS = 2
+WORKER_STEP = 1
 SLUG_TRIES = 3
+PRESSURE_WINDOW = 20
+PRESSURE_HIT_LIMIT = 4
+COOLDOWN_SEC = 3600
+SCALE_UP_CLEAN = 12
 
 
 def clamp_workers(workers):
-    return max(1, min(MAX_WORKERS, int(workers)))
+    return max(MIN_WORKERS, min(MAX_WORKERS, int(workers)))
 
 
 def cache_is_complete(path):
@@ -25,7 +33,6 @@ def cache_is_complete(path):
     if payload.get("complete") is not True:
         return False
     songs = payload.get("songs") or []
-    # complete=true со старого прогона, но внутри мусор страницы — качаем заново
     for song in songs:
         text = song.get("text") or ""
         if text.strip() and not lyrics_looks_clean(text):
@@ -42,7 +49,6 @@ def pending_slugs(artists, cache_dir):
 
 
 def adopt_legacy_caches(cache_dir, partial_slugs=()):
-    # Старый прогон не ставил complete. Готовый файл помечаем, оборванный удаляем.
     partial = set(partial_slugs)
     cache = Path(cache_dir)
     stamped = []
@@ -85,39 +91,132 @@ def fetch_slug_job(slug, cache_dir):
     return {"slug": slug, "ok": True, "docs": docs}
 
 
+def _is_pressure_error(error: str) -> bool:
+    text = (error or "").lower()
+    if not text:
+        return False
+    if any(tok in text for tok in ("404", "not found", "dirty lyrics", "incomplete")):
+        return False
+    return any(
+        tok in text
+        for tok in (
+            "429",
+            "503",
+            "timeout",
+            "timed out",
+            "urlerror",
+            "connection",
+            "reset",
+            "temporarily",
+            "rate limit",
+            "too many",
+            "503:",
+            "http error 429",
+            "http error 503",
+        )
+    )
+
+
 def run_genius_pool(artists, cache_dir, workers=MAX_WORKERS):
-    width = clamp_workers(workers)
+    target = clamp_workers(workers)
+    active = target
+    cooldown_until = 0.0
     queue = pending_slugs(artists, cache_dir)
     failures = []
     done = []
     tries = {}
-    print(f"genius pool workers={width} pending={len(queue)}", flush=True)
+    recent = deque(maxlen=PRESSURE_WINDOW)
+    print(
+        f"genius pool workers_target={target} workers_active={active} "
+        f"pending={len(queue)} adaptive=on step={WORKER_STEP} cooldown={COOLDOWN_SEC}s",
+        flush=True,
+    )
     if not queue:
         return done, failures
+
     inflight = {}
-    with ProcessPoolExecutor(max_workers=width) as pool:
+    with ProcessPoolExecutor(max_workers=target) as pool:
         while queue or inflight:
-            while queue and len(inflight) < width:
+            now = time.time()
+            if cooldown_until and now >= cooldown_until:
+                cooldown_until = 0.0
+                pressure = sum(1 for flag in recent if flag)
+                if pressure < PRESSURE_HIT_LIMIT and active < target:
+                    nxt = min(target, active + WORKER_STEP)
+                    print(
+                        f"  scale-up workers={active}->{nxt} "
+                        f"(cooldown over, pressure={pressure}/{len(recent)})",
+                        flush=True,
+                    )
+                    active = nxt
+
+            while queue and len(inflight) < active:
                 slug = queue.pop(0)
                 inflight[pool.submit(fetch_slug_job, slug, str(cache_dir))] = slug
+
             if not inflight:
                 break
-            future = next(as_completed(list(inflight)))
-            slug = inflight.pop(future)
-            try:
-                info = future.result()
-            except Exception as exc:
-                info = {"slug": slug, "ok": False, "error": str(exc)}
-            if info.get("ok"):
-                done.append(info)
-                print(f"  done {info['slug']} docs={info['docs']}", flush=True)
+
+            finished, _pending = wait(
+                list(inflight), return_when=FIRST_COMPLETED, timeout=1.0
+            )
+            if not finished:
                 continue
-            attempt = tries.get(slug, 0) + 1
-            tries[slug] = attempt
-            if attempt < SLUG_TRIES:
-                queue.append(slug)
-                print(f"  retry {slug} {attempt}/{SLUG_TRIES}: {info.get('error')}", flush=True)
-                continue
-            failures.append(f"{slug}: {info.get('error')}")
-            print(f"  fail {slug}: {info.get('error')}", flush=True)
+
+            for future in finished:
+                slug = inflight.pop(future)
+                try:
+                    info = future.result()
+                except Exception as exc:
+                    info = {"slug": slug, "ok": False, "error": str(exc)}
+
+                if info.get("ok"):
+                    done.append(info)
+                    recent.append(False)
+                    print(f"  done {info['slug']} docs={info['docs']}", flush=True)
+                else:
+                    err = info.get("error") or ""
+                    pressure = _is_pressure_error(err)
+                    recent.append(pressure)
+                    attempt = tries.get(slug, 0) + 1
+                    tries[slug] = attempt
+                    if attempt < SLUG_TRIES:
+                        queue.append(slug)
+                        tag = "pressure" if pressure else "retry"
+                        print(
+                            f"  {tag} {slug} {attempt}/{SLUG_TRIES}: {err}",
+                            flush=True,
+                        )
+                    else:
+                        failures.append(f"{slug}: {err}")
+                        print(f"  fail {slug}: {err}", flush=True)
+
+                hits = sum(1 for flag in recent if flag)
+                now = time.time()
+                if hits >= PRESSURE_HIT_LIMIT and active > MIN_WORKERS:
+                    nxt = max(MIN_WORKERS, active - WORKER_STEP)
+                    if nxt < active:
+                        active = nxt
+                        cooldown_until = now + COOLDOWN_SEC
+                        print(
+                            f"  throttle workers->{active} "
+                            f"cooldown={COOLDOWN_SEC}s "
+                            f"pressure={hits}/{len(recent)}",
+                            flush=True,
+                        )
+                        # stop filling new slots until some inflight drain naturally
+                elif (
+                    not cooldown_until
+                    and active < target
+                    and len(recent) >= SCALE_UP_CLEAN
+                    and hits == 0
+                ):
+                    nxt = min(target, active + WORKER_STEP)
+                    if nxt > active:
+                        print(
+                            f"  scale-up workers={active}->{nxt} (clean window)",
+                            flush=True,
+                        )
+                        active = nxt
+
     return done, failures

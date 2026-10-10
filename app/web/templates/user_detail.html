@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block crumbs %}<a href="/">Admin</a> / <a href="/users">Пользователи</a> / <span>{{ user_id }}</span>{% endblock %}
+{% block content %}
+<h1>Пользователь</h1>
+<div id="user-detail" data-user-id="{{ user_id }}">Загрузка…</div>
+<div id="chart-user-spark" class="chart-box" data-empty="нет данных"></div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block crumbs %}<a href="/">Admin</a> / <span>Система</span>{% endblock %}
+{% block content %}
+<h1>Система</h1>
+{% if not db_ok %}
+<p class="error-panel" id="db-missing">без БД: файл не найден</p>
+{% endif %}
+<p class="muted" id="system-stamp">Загрузка…</p>
+<section>
+  <h2>База данных</h2>
+  <div id="system-db-meta"></div>
+</section>
+<section>
+  <h2>Память и нагрузка</h2>
+  <div id="system-bars" class="bars"></div>
+</section>
+<section>
+  <h2>Хранение</h2>
+  <div id="system-storage" class="storage-bars-wrap" data-empty="нет данных"></div>
+</section>
+{% endblock %}

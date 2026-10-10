@@ -149,6 +149,9 @@ def generate_mlm(
         logits = model(tokens)[0, pos]
         tokens[0, pos] = _sample_id(logits, temp, model.mask_id)
     for _ in range(max(0, int(n_iters))):
+        from core.bus.cancel_flag import check_cancelled
+
+        check_cancelled()
         if not free:
             break
         pos = free[int(torch.randint(0, len(free), (1,)).item())]

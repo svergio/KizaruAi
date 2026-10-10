@@ -16,6 +16,7 @@ from core.text.pretrained_vocab import (
 from core.text.rnn import TextRNN
 from core.text.sample import evaluate, evaluate_words
 from core.text.tokenize import WORD_MIN_FREQ, WORD_SEQ_LEN, text_to_word_seq
+from training import mlflow_track
 
 
 def parse_args():
@@ -174,6 +175,25 @@ def main():
         f"lstm={args.embedding_size}/{args.hidden_size}x{args.n_layers} "
         f"seq={seq_len} bptt={bptt} params={n_params}"
     )
+    run_id = mlflow_track.start_run(
+        "kizaru-legacy",
+        run_name=f"textrnn_{level}_{Path(out).stem}",
+        params={
+            "level": level,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "hidden_size": args.hidden_size,
+            "embedding_size": args.embedding_size,
+            "n_layers": args.n_layers,
+            "lr": args.lr,
+            "start_epoch": start_epoch,
+            "out": out,
+            "n_params": n_params,
+        },
+        tags={"project": "kizaruai", "entrypoint": "train"},
+    )
+    if run_id:
+        print(f"mlflow_run={run_id}", flush=True)
 
     if start_epoch >= args.epochs:
         save_model(
@@ -186,6 +206,7 @@ def main():
             level=level,
         )
         print(f"done (already at epochs), model={out} best_loss={best_loss:.6f}")
+        mlflow_track.end_run()
         return
 
     criterion = nn.CrossEntropyLoss()
@@ -205,6 +226,7 @@ def main():
         if len(loss_avg) >= args.eval_every:
             mean_loss = float(np.mean(loss_avg))
             print(f"Loss: {mean_loss:.6f}")
+            mlflow_track.log_metrics({"loss": mean_loss}, step=epoch + 1)
             scheduler.step(mean_loss)
             loss_avg = []
             if level == "word":
@@ -254,6 +276,8 @@ def main():
         level=level,
     )
     print(f"done, model={out} best_loss={best_loss:.6f}")
+    mlflow_track.log_metrics({"best_loss": best_loss if best_loss < float("inf") else 0.0})
+    mlflow_track.end_run()
 
 
 if __name__ == "__main__":

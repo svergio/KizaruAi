@@ -207,11 +207,15 @@ def axis_accuracy(model, vocab, phrases):
 
 
 def predict_mood(model, vocab, text):
+    from core.bus.cancel_flag import check_cancelled
+
+    check_cancelled()
     model.eval()
     device = next(model.parameters()).device
     with torch.no_grad():
         logits = model(encode(text, vocab).to(device))
         probs = torch.sigmoid(logits)[0]
+    check_cancelled()
     kind = float(probs[0])
     fun = float(probs[1])
     kind_name = "добрый" if kind >= 0.5 else "злой"

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KizaruAi — {{ title }}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+  <header class="top">
+    <div class="top-brand" aria-hidden="false">KizaruAi Admin</div>
+    <button type="button" class="nav-toggle" id="btn-nav-toggle" aria-expanded="false" aria-controls="main-nav">Меню</button>
+    <nav class="tabs" id="main-nav" aria-label="Разделы админки">
+      <a href="/" class="{% if active_tab == 'home' %}active{% endif %}">Главная</a>
+      <a href="/jobs" class="{% if active_tab == 'jobs' %}active{% endif %}">Задачи</a>
+      <a href="/services" class="{% if active_tab == 'services' %}active{% endif %}">Сервисы</a>
+      <a href="/system" class="{% if active_tab == 'system' %}active{% endif %}">Система</a>
+      <a href="/users" class="{% if active_tab == 'users' %}active{% endif %}">Пользователи</a>
+      <a href="/workers" class="{% if active_tab == 'workers' %}active{% endif %}">Воркеры</a>
+      <a href="/logs" class="{% if active_tab == 'logs' %}active{% endif %}">Логи</a>
+    </nav>
+    <div class="top-meta">
+      <span id="clock-msk" class="muted"></span>
+      <button type="button" id="btn-pause" class="btn-pause" title="Пауза автообновления" aria-label="Пауза автообновления">||</button>
+    </div>
+  </header>
+  <div class="crumbs">{% block crumbs %}{% endblock %}</div>
+  <main class="wrap" id="main" data-page="{{ active_tab }}" data-refresh="{{ refresh_sec }}">
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    window.KIZARU_STATUS = {{ status_map | tojson }};
+    window.KIZARU_KIND = {{ kind_map | tojson }};
+    window.KIZARU_WORKER_KIND = {{ worker_kind_map | tojson }};
+  </script>
+  <script src="/static/vendor/d3.v7.min.js"></script>
+  <script src="/static/js/charts/lineChart.js"></script>
+  <script src="/static/js/charts/sparkline.js"></script>
+  <script src="/static/js/charts/statusDonut.js"></script>
+  <script src="/static/js/charts/heatmap.js"></script>
+  <script src="/static/js/charts/audience.js"></script>
+  <script src="/static/js/charts/timelineGantt.js"></script>
+  <script src="/static/js/charts/clusterMap.js"></script>
+  <script src="/static/js/charts/gauges.js"></script>
+  <script src="/static/js/charts/storageBars.js"></script>
+  <script src="/static/js/charts/fleetMatrix.js"></script>
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

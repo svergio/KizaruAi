@@ -164,3 +164,103 @@ class MiniDeepSeek(nn.Module):
         for block in self.blocks:
             x = block(x)
         return self.head(self.norm_f(x))
+
+
+try:
+    from transformers import StoppingCriteria as _HFStoppingCriteria
+except Exception:  # pragma: no cover - optional dependency shape
+    class _HFStoppingCriteria:  # type: ignore[no-redef]
+        def __call__(self, input_ids, scores, **kwargs):
+            return False
+
+
+class CancelFlagStoppingCriteria(_HFStoppingCriteria):
+    """HF StoppingCriteria that reads core.bus.cancel_flag (cancel / MAX_RUNTIME)."""
+
+    def __call__(self, input_ids, scores, **kwargs):
+        from core.bus.cancel_flag import get_cancel_event
+
+        event = get_cancel_event()
+        return event is not None and event.is_set()
+
+
+def generate(
+    model,
+    char_to_idx,
+    idx_to_char,
+    start_text="Я",
+    prediction_len=48,
+    temp=0.8,
+    device=None,
+    max_lines=None,
+    level="char",
+    stopping_criteria=None,
+):
+    """Autoregressive generate with HF-style StoppingCriteria (cancel_flag)."""
+    from core.bus.cancel_flag import GenerationCancelled
+    from core.text.sample import (
+        _completed_lyric_lines,
+        _completed_lyric_lines_tokens,
+        _encode_start,
+        _sample_index,
+    )
+
+    if device is None:
+        device = next(model.parameters()).device
+    model.eval()
+    criteria = list(stopping_criteria or [])
+    criteria.append(CancelFlagStoppingCriteria())
+
+    def _stop(ids):
+        tensor_ids = torch.tensor([ids], dtype=torch.long, device=device)
+        return any(bool(crit(tensor_ids, None)) for crit in criteria)
+
+    if level == "word":
+        from core.text.tokenize import TOKEN_UNK, detokenize, encode_words
+
+        ids = encode_words(start_text, char_to_idx)
+        start_lines = _completed_lyric_lines_tokens(ids, idx_to_char)
+        block = [char_to_idx[TOKEN_UNK]] if TOKEN_UNK in char_to_idx else None
+        block_size = model.block_size
+        with torch.no_grad():
+            for _ in range(prediction_len):
+                if _stop(ids):
+                    raise GenerationCancelled()
+                ctx = torch.LongTensor(ids[-block_size:]).view(1, -1).to(device)
+                logits = model(ctx)[0, -1]
+                probs = F.softmax(logits / max(temp, 1e-6), dim=-1).cpu().numpy()
+                top_index = _sample_index(probs, len(char_to_idx), block_ids=block)
+                ids.append(top_index)
+                if (
+                    max_lines is not None
+                    and _completed_lyric_lines_tokens(ids, idx_to_char) - start_lines
+                    >= max_lines
+                ):
+                    break
+        tokens = [
+            idx_to_char[int(idx)]
+            for idx in ids
+            if idx_to_char.get(int(idx)) != TOKEN_UNK
+        ]
+        return detokenize(tokens).rstrip()
+
+    ids = _encode_start(start_text, char_to_idx)
+    predicted_text = "".join(idx_to_char[int(idx)] for idx in ids)
+    start_lines = _completed_lyric_lines(predicted_text)
+    block_size = model.block_size
+    with torch.no_grad():
+        for _ in range(prediction_len):
+            if _stop(ids):
+                raise GenerationCancelled()
+            ctx = torch.LongTensor(ids[-block_size:]).view(1, -1).to(device)
+            logits = model(ctx)[0, -1]
+            probs = F.softmax(logits / max(temp, 1e-6), dim=-1).cpu().numpy()
+            top_index = _sample_index(probs, len(char_to_idx))
+            ids.append(top_index)
+            predicted_text += idx_to_char[top_index]
+            if (
+                max_lines is not None
+                and _completed_lyric_lines(predicted_text) - start_lines >= max_lines
+            ):
+                break
+    return predicted_text.rstrip()

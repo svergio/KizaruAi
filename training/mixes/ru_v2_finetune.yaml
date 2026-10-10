@@ -1,0 +1,11 @@
+# Дообучение: как ru_rap_v1 (85/10/5). Сплит по хешу общий с ru_v2_pretrain.
+name: ru_v2_finetune
+seed: 1
+total_tokens: max
+splits:
+  val: 0.02
+  test: 0.02
+pools:
+  ru_rap: 85
+  ru_poetry: 10
+  en_rap: 5

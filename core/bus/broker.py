@@ -1,15 +1,18 @@
 import base64
 import json
-import os
 import sys
 import time
 from pathlib import Path
 
 from core.bus.queue import (
     ActiveJobError,
+    DEFAULT_POLL_TIMEOUT,
     JobStore,
     PayloadTooLargeError,
     QueueFullError,
+    ORCHESTRATOR_FRESH_SEC,
+    _pid_alive,
+    poll_until_done_sync as _poll_until_done_sync,
 )
 from core.bus.routing import resolve_worker_kind
 
@@ -18,11 +21,23 @@ POLL_SEC = 0.25
 
 
 def cli_user_id() -> str:
-    return f"cli:{os.getpid()}"
+    return "cli"
 
 
 def orchestrator_online(store: JobStore) -> bool:
-    return store.get_meta("orchestrator") is not None
+    raw = store.get_meta("orchestrator")
+    if not raw:
+        return False
+    try:
+        meta = json.loads(raw)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(meta, dict):
+        return False
+    pid = meta.get("pid")
+    if not _pid_alive(pid):
+        return False
+    return store.meta_fresh("orchestrator", ORCHESTRATOR_FRESH_SEC)
 
 
 def require_broker(store: JobStore, worker_kind: str) -> None:
@@ -35,20 +50,17 @@ def require_broker(store: JobStore, worker_kind: str) -> None:
 
 
 def poll_until_done_sync(
-    store: JobStore, job_id: int, interval: float = POLL_SEC
+    store: JobStore,
+    job_id: int,
+    interval: float = POLL_SEC,
+    timeout: float = DEFAULT_POLL_TIMEOUT,
 ) -> dict:
-    while True:
-        row = store.get_job(job_id)
-        if row is None:
-            raise SystemExit(f"job {job_id} not found")
-        status = row["status"]
-        if status == "done":
-            if not row["result"]:
-                raise SystemExit(f"job {job_id} finished without result")
-            return json.loads(row["result"])
-        if status == "error":
-            raise SystemExit(row["error"] or f"job {job_id} failed")
-        time.sleep(interval)
+    try:
+        return _poll_until_done_sync(store, job_id, interval=interval, timeout=timeout)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
+    except TimeoutError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def enqueue_and_wait(
@@ -97,6 +109,19 @@ def emit_job_result(result: dict, out_path: Path | None = None) -> None:
         _print_text("\n".join(result["chunks"]))
         return
     if kind == "file":
+        src = result.get("path")
+        if src:
+            src_path = Path(src)
+            if not src_path.is_file():
+                raise SystemExit(f"worker file missing: {src_path}")
+            if out_path and Path(out_path).resolve() != src_path.resolve():
+                dest = Path(out_path)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(src_path.read_bytes())
+                print(str(dest.resolve()))
+            else:
+                print(str(src_path.resolve()))
+            return
         raw = base64.b64decode(result["data_b64"])
         path = Path(out_path) if out_path else Path(result.get("filename") or "out.bin")
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -9,6 +9,7 @@ from core.mood.model import (
     save_mood,
     train_phrases,
 )
+from training import mlflow_track
 
 
 def parse_args():
@@ -21,28 +22,44 @@ def parse_args():
 
 def main():
     args = parse_args()
-    model, vocab = fit_mood(epochs=args.epochs, seed=args.seed)
-    train_acc = accuracy(model, vocab, train_phrases())
-    train_axis_acc = axis_accuracy(model, vocab, train_phrases())
-    print(
-        f"train_phrase_acc={train_acc:.3f} train_axis_acc={train_axis_acc:.3f} "
-        f"vocab={len(vocab)}"
+    mlflow_track.start_run(
+        "kizaru-legacy",
+        run_name=f"mood_{args.epochs}",
+        params={"epochs": args.epochs, "seed": args.seed, "out": args.out},
+        tags={"project": "kizaruai", "entrypoint": "train_mood"},
     )
-    print()
-    for text in VECTOR_DEMO:
-        kind_name, kind, fun_name, fun = predict_mood(model, vocab, text)
+    status = "FINISHED"
+    try:
+        model, vocab = fit_mood(epochs=args.epochs, seed=args.seed)
+        train_acc = accuracy(model, vocab, train_phrases())
+        train_axis_acc = axis_accuracy(model, vocab, train_phrases())
         print(
-            f"{text:24} {kind_name} {kind:.2f} | {fun_name} {fun:.2f}   "
-            f"vector=({kind:.2f}, {fun:.2f})"
+            f"train_phrase_acc={train_acc:.3f} train_axis_acc={train_axis_acc:.3f} "
+            f"vocab={len(vocab)}"
         )
-    save_mood(
-        args.out,
-        model,
-        vocab,
-        train_phrase_acc=train_acc,
-        train_axis_acc=train_axis_acc,
-    )
-    print(f"\nsaved {args.out}")
+        print()
+        for text in VECTOR_DEMO:
+            kind_name, kind, fun_name, fun = predict_mood(model, vocab, text)
+            print(
+                f"{text:24} {kind_name} {kind:.2f} | {fun_name} {fun:.2f}   "
+                f"vector=({kind:.2f}, {fun:.2f})"
+            )
+        save_mood(
+            args.out,
+            model,
+            vocab,
+            train_phrase_acc=train_acc,
+            train_axis_acc=train_axis_acc,
+        )
+        print(f"\nsaved {args.out}")
+        mlflow_track.log_metrics(
+            {"train_phrase_acc": float(train_acc), "train_axis_acc": float(train_axis_acc)}
+        )
+    except Exception:
+        status = "FAILED"
+        raise
+    finally:
+        mlflow_track.end_run(status=status)
 
 
 if __name__ == "__main__":

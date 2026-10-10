@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import base64
+import json
 import logging
 import os
 from io import BytesIO
@@ -11,6 +12,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.bus.queue import (
+    DEFAULT_POLL_TIMEOUT,
     MAX_ATTACHMENT_BYTES,
     ActiveJobError,
     JobStore,
@@ -19,6 +21,7 @@ from core.bus.queue import (
     format_eta_ru,
     poll_until_done,
 )
+from core.bus.user_stats import format_me_embed_lines
 from core.mood.model import mood_source
 from core.bus.routing import build_pic_payload, build_text_payload, resolve_worker_kind
 from core.image.ascii import (
@@ -40,6 +43,7 @@ from core.text.params import (
 )
 
 DISCORD_LIMIT = 1800
+BOT_STATS_INTERVAL_SEC = 60.0
 _STILL_EXT = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
 _ANIM_EXT = (".gif", ".mp4", ".webm", ".mov")
 
@@ -72,9 +76,14 @@ AI_HELP = (
     "**/ai mood** — две оси: добрый/злой и веселый/грустный. "
     "`text` необязателен: пустой берёт reply, иначе вставь текст.\n"
     "**/ai pic** — символьная картинка, нужно вложение. "
-    "line и simple — текст в чат, 31 колонка. "
-    "cli — файл: PNG для картинки, GIF для gif или видео. "
-    "`scale` и `cells` только у cli (по умолчанию 2 и 320).\n"
+    "`mode`: **simple** | **line** | **render** | **details**. "
+    "По умолчанию simple/line/details — текст в чат (31 колонка); "
+    "render — PNG/GIF. "
+    "`cli=True` — ответ файлом (как CLI still), для любого режима. "
+    "`scale`/`cells` для файла (по умолчанию 2 и 320); "
+    "`dark`/`light` только simple; `line_thr`/`details_thr` у line/render/details.\n"
+    "**/ai cancel** — отменить свою активную заявку (queued, assigned или running).\n"
+    "**/ai me** — статистика твоих заявок.\n"
     "**/ai help** — эта справка."
 )
 
@@ -140,6 +149,30 @@ def _user_id(interaction: discord.Interaction) -> str:
     return str(interaction.user.id)
 
 
+def _touch_user_profile(store: JobStore, interaction: discord.Interaction) -> str:
+    uid = _user_id(interaction)
+    name = interaction.user.display_name or interaction.user.name
+    avatar = None
+    if interaction.user.display_avatar:
+        avatar = str(interaction.user.display_avatar.url)
+    store.update_user_profile(uid, display_name=name, avatar_url=avatar)
+    return uid
+
+
+def _active_job_for_user(store: JobStore, discord_id: str) -> dict | None:
+    with store._connect() as conn:
+        row = conn.execute(
+            """
+            SELECT j.id, j.status FROM jobs j
+            JOIN users u ON u.id = j.user_id
+            WHERE u.discord_id = ? AND j.status IN ('queued', 'assigned', 'running')
+            ORDER BY j.id DESC LIMIT 1
+            """,
+            (discord_id,),
+        ).fetchone()
+    return None if row is None else dict(row)
+
+
 def _worker_has(store: JobStore, key: str) -> bool | None:
     models = store.get_worker_models()
     if models is None:
@@ -175,7 +208,7 @@ async def _defer_with_queue_ack(
 
 
 async def _wait_job(store: JobStore, job_id: int):
-    return await poll_until_done(store, job_id)
+    return await poll_until_done(store, job_id, timeout=DEFAULT_POLL_TIMEOUT)
 
 
 def _log_user_error(context: str, exc: BaseException):
@@ -186,6 +219,7 @@ async def _enqueue_or_reply(
     interaction, store: JobStore, discord_id: str, kind: str, payload: dict
 ):
     try:
+        await asyncio.to_thread(_touch_user_profile, store, interaction)
         return await asyncio.to_thread(store.enqueue, discord_id, kind, payload)
     except ActiveJobError:
         await interaction.response.send_message(ACTIVE_JOB_MSG)
@@ -327,26 +361,37 @@ def build_bot(db_path=None):
             return
         await _send_job_result(interaction, result)
 
-    @ai.command(name="pic", description="line и simple — текст в чат, cli — PNG или GIF")
+    @ai.command(name="pic", description="simple|line|render|details; cli=файл PNG")
     @app_commands.describe(
-        mode="line и simple — сетка в чат; cli — PNG или GIF",
+        mode="Четыре режима: simple|line|render|details",
         file="Картинка, GIF или видео",
-        scale="Только для cli, по умолчанию 2",
-        cells="Только для cli: колонки, по умолчанию 320",
+        cli="Ответ файлом PNG/GIF (как CLI still), не текстом",
+        scale="Файл: px на квадрант смайла, по умолчанию 2",
+        cells="Файл: колонки, по умолчанию 320",
+        dark="simple: символ тени (по умолчанию ⬛)",
+        light="simple: символ света (по умолчанию ⬜)",
+        line_thr="line|render|details: порог measured line (default 0.45)",
+        details_thr="details: порог soft-паттернов (default 0.08)",
     )
     @app_commands.choices(
         mode=[
-            app_commands.Choice(name="line", value="1"),
             app_commands.Choice(name="simple", value="2"),
-            app_commands.Choice(name="cli", value="3"),
+            app_commands.Choice(name="line", value="1"),
+            app_commands.Choice(name="render", value="3"),
+            app_commands.Choice(name="details", value="4"),
         ]
     )
     async def ai_pic(
         interaction: discord.Interaction,
         mode: app_commands.Choice[str],
         file: discord.Attachment,
+        cli: bool = False,
         scale: app_commands.Range[int, 1, 32] = CLI_DEFAULT_SCALE,
         cells: app_commands.Range[int, 8, CLI_MAX_COLS] = CLI_DEFAULT_CELLS,
+        dark: str | None = None,
+        light: str | None = None,
+        line_thr: float | None = None,
+        details_thr: float | None = None,
     ):
         data, filename = await _attachment_bytes(file)
         if filename == "too_large":
@@ -358,22 +403,34 @@ def build_bot(db_path=None):
             )
             return
         key = mode.value
-        if key not in ("1", "2", "3"):
-            await interaction.response.send_message("Режим: line, simple или cli.")
+        if key not in ("1", "2", "3", "4"):
+            await interaction.response.send_message(
+                "Режим: simple, line, render или details."
+            )
             return
+        as_file = bool(cli) or key == "3"
         animated = None
-        if key == "3":
+        if as_file:
             from core.image.probe import is_animated_media
 
             animated = is_animated_media(data, filename)
-        payload = build_pic_payload(
-            key,
-            data,
-            filename,
-            scale=max(1, int(scale)) if key == "3" else None,
-            cells=int(cells) if key == "3" else None,
-            animated=animated,
-        )
+        try:
+            payload = build_pic_payload(
+                key,
+                data,
+                filename,
+                scale=max(1, int(scale)) if as_file else None,
+                cells=int(cells) if as_file else None,
+                animated=animated,
+                as_file=as_file,
+                dark=dark if key == "2" else None,
+                light=light if key == "2" else None,
+                line_thr=line_thr if key in ("1", "3", "4") else None,
+                details_thr=details_thr if key == "4" else None,
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc))
+            return
         job_id = await _enqueue_or_reply(
             interaction,
             store,
@@ -394,6 +451,32 @@ def build_bot(db_path=None):
             return
         await _send_job_result(interaction, result)
 
+    @ai.command(name="me", description="Статистика твоих заявок")
+    async def ai_me(interaction: discord.Interaction):
+        uid = await asyncio.to_thread(_touch_user_profile, store, interaction)
+        stats = await asyncio.to_thread(store.user_stats_for_discord, uid)
+        name = interaction.user.display_name or interaction.user.name
+        embed = discord.Embed(title=f"Статистика — {name}")
+        if interaction.user.display_avatar:
+            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        for title, value in format_me_embed_lines(stats, name):
+            embed.add_field(name=title, value=value[:1024], inline=False)
+        await interaction.response.send_message(embed=embed)
+
+    @ai.command(name="cancel", description="Отменить свою активную заявку в очереди")
+    async def ai_cancel(interaction: discord.Interaction):
+        uid = _user_id(interaction)
+        row = await asyncio.to_thread(_active_job_for_user, store, uid)
+        if row is None:
+            await interaction.response.send_message("Нет активной заявки для отмены.")
+            return
+        job_id = int(row["id"])
+        ok = await asyncio.to_thread(store.cancel, job_id, uid)
+        if ok:
+            await interaction.response.send_message(f"Заявка #{job_id} отменена.")
+        else:
+            await interaction.response.send_message("Не удалось отменить заявку.")
+
     @ai.command(name="help", description="Справка по /ai")
     async def ai_help(interaction: discord.Interaction):
         await interaction.response.send_message(AI_HELP[:DISCORD_LIMIT])
@@ -408,30 +491,67 @@ def build_bot(db_path=None):
         if entries:
             store.sync_guilds(entries)
 
+    def _record_bot_stats():
+        guilds = list(bot.guilds)
+        members_total = 0
+        for g in guilds:
+            c = getattr(g, "member_count", None)
+            if c is not None:
+                members_total += int(c)
+        # intents.presences off → members_online always NULL
+        latency_ms = None
+        try:
+            latency_ms = float(bot.latency) * 1000.0
+        except Exception:
+            latency_ms = None
+        store.insert_bot_stats(
+            guilds=len(guilds),
+            members_total=members_total,
+            members_online=None,
+            latency_ms=latency_ms,
+        )
+        store.set_meta(
+            "discord",
+            json.dumps({"pid": os.getpid(), "guilds": len(guilds)}, ensure_ascii=False),
+        )
+
+    async def _bot_stats_loop():
+        await bot.wait_until_ready()
+        while not bot.is_closed():
+            try:
+                await asyncio.to_thread(_record_bot_stats)
+            except Exception as exc:
+                log.warning("bot_stats failed: %s", exc)
+            await asyncio.sleep(BOT_STATS_INTERVAL_SEC)
+
     @bot.event
     async def on_ready():
-        print(f"Bot is ready as {bot.user}")
+        log.info("Bot is ready as %s", bot.user)
         try:
             await asyncio.to_thread(_persist_guilds)
         except Exception as exc:
             log.warning("guild sync to db failed: %s", exc)
+        if not getattr(bot, "_bot_stats_task", None) or bot._bot_stats_task.done():
+            bot._bot_stats_task = asyncio.create_task(_bot_stats_loop())
         try:
             if not bot.guilds:
-                print("slash sync: no guilds yet (invite bot to a server)")
+                log.info("slash sync: no guilds yet (invite bot to a server)")
                 return
             for guild in bot.guilds:
                 bot.tree.copy_global_to(guild=guild)
                 guild_cmds = await bot.tree.sync(guild=guild)
-                print(
-                    f"slash sync guild={guild.id} name={guild.name!r} "
-                    f"commands={len(guild_cmds)}"
+                log.info(
+                    "slash sync guild=%s name=%r commands=%s",
+                    guild.id,
+                    guild.name,
+                    len(guild_cmds),
                 )
-            print(
-                f"slash sync: guild-only surface, {len(bot.guilds)} guild(s); "
-                "global sync skipped"
+            log.info(
+                "slash sync: guild-only surface, %s guild(s); global sync skipped",
+                len(bot.guilds),
             )
         except Exception as exc:
-            print(f"slash sync failed: {exc}")
+            log.exception("slash sync failed: %s", exc)
 
     return bot
 
@@ -448,16 +568,17 @@ def parse_args():
 
 
 def main():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    from core.logging_setup import configure_logging
+
+    configure_logging("discord")
+    logging.getLogger("discord").setLevel(logging.WARNING)
+    logging.getLogger("discord.http").setLevel(logging.WARNING)
     args = parse_args()
     token = (args.token.strip() or os.environ.get("DISCORD_TOKEN", "")).strip()
     if not token:
         raise SystemExit("Set DISCORD_TOKEN or pass --token")
     bot = build_bot(db_path=Path(args.db))
-    bot.run(token)
+    bot.run(token, log_handler=None)
 
 
 if __name__ == "__main__":

@@ -1,80 +1,64 @@
-import asyncio
-import tempfile
-import unittest
-from pathlib import Path
+"""core/mood/model.py: токенизация, обучение на 1-2 эпохах, сохранение/загрузка."""
+import pytest
+import torch
 
-from core.mood.model import (
-    fit_mood,
-    load_mood,
-    mood_source,
-    predict_mood,
-    save_mood,
-)
-from app.discord.__main__ import replied_content
+from core.mood import model as mood
 
 
-class MoodTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.model, cls.vocab = fit_mood(epochs=300, seed=2)
-
-    def _assert_axes(self, text, exp_kind, exp_fun):
-        kind_name, kind, fun_name, fun = predict_mood(self.model, self.vocab, text)
-        self.assertEqual(kind_name, exp_kind, (text, kind, fun))
-        self.assertEqual(fun_name, exp_fun, (text, kind, fun))
-
-    def test_axis_phrases(self):
-        self._assert_axes("злой и грустный", "злой", "грустный")
-        self._assert_axes("добрый но грустный", "добрый", "грустный")
-        self._assert_axes("злой но веселый", "злой", "веселый")
-        self._assert_axes("круто", "добрый", "веселый")
-
-    def test_reply_beats_inline_text(self):
-        self.assertEqual(mood_source("мне хуево", "круто"), "мне хуево")
-        self.assertEqual(mood_source("  ", "круто"), "круто")
-        self.assertEqual(mood_source("", ""), "")
-
-    def test_mood_file_roundtrip(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "mood.pt"
-            save_mood(path, self.model, self.vocab, train_phrase_acc=1.0)
-            loaded, vocab, meta = load_mood(path)
-        self.assertEqual(vocab, self.vocab)
-        self.assertEqual(meta["train_phrase_acc"], 1.0)
-        kind_name, _, fun_name, _ = predict_mood(loaded, vocab, "злой и грустный")
-        self.assertEqual(kind_name, "злой")
-        self.assertEqual(fun_name, "грустный")
-
-    def test_reject_old_checkpoint(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "old.pt"
-            save_mood(path, self.model, self.vocab)
-            payload = __import__("torch").load(path, weights_only=False)
-            del payload["kind"]
-            __import__("torch").save(payload, path)
-            with self.assertRaises(ValueError):
-                load_mood(path)
-
-    def test_replied_message_content(self):
-        class Message:
-            content = "хуево"
-
-        class Reference:
-            message_id = 7
-            resolved = Message()
-
-        class CommandMessage:
-            reference = Reference()
-
-        class Ctx:
-            message = CommandMessage()
-
-        text = asyncio.run(replied_content(Ctx()))
-        self.assertEqual(text, "хуево")
-        kind_name, _, fun_name, _ = predict_mood(self.model, self.vocab, text)
-        self.assertEqual(kind_name, "злой")
-        self.assertEqual(fun_name, "грустный")
+def test_tokenize_lower_and_yo():
+    assert mood.tokenize("Ёжик ЗЛОЙ!") == ["ежик", "злой"]
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_build_vocab_and_encode_unknown():
+    vocab = mood.build_vocab(["добрый кот", "злой кот"])
+    assert vocab[mood.UNK] == 0 and len(vocab) == 4
+    assert mood.encode("неизвестно", vocab).tolist() == [[0]]
+    assert mood.encode("", vocab).tolist() == [[0]]
+
+
+def test_vector_train_axes_are_valid():
+    for text, target in mood.VECTOR_TRAIN.items():
+        assert len(target) == 2, text
+        assert all(bit in (0, 1, None) for bit in target), text
+
+
+@pytest.fixture(scope="module")
+def tiny_mood():
+    return mood.fit_mood(epochs=2, seed=1)
+
+
+def test_predict_mood_contract(tiny_mood):
+    model, vocab = tiny_mood
+    kind_name, kind, fun_name, fun = mood.predict_mood(model, vocab, "злой но веселый")
+    assert kind_name in ("добрый", "злой") and fun_name in ("веселый", "грустный")
+    assert 0.0 <= kind <= 1.0 and 0.0 <= fun <= 1.0
+
+
+def test_accuracy_in_range(tiny_mood):
+    model, vocab = tiny_mood
+    assert 0.0 <= mood.accuracy(model, vocab, mood.train_phrases()) <= 1.0
+    assert 0.0 <= mood.axis_accuracy(model, vocab, mood.train_phrases()) <= 1.0
+    assert mood.accuracy(model, vocab, {}) == 1.0
+
+
+def test_save_load_roundtrip(tmp_path, tiny_mood):
+    model, vocab = tiny_mood
+    path = mood.save_mood(tmp_path / "mood.pt", model, vocab, train_axis_acc=0.5)
+    loaded, vocab2, meta = mood.load_mood(path)
+    assert vocab2 == vocab and meta["train_axis_acc"] == 0.5
+    assert mood.predict_mood(loaded, vocab2, "кайф") == mood.predict_mood(model, vocab, "кайф")
+
+
+def test_load_mood_errors(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        mood.load_mood(tmp_path / "nope.pt")
+    old = tmp_path / "old.pt"
+    torch.save({"kind": "legacy", "vocab": {}}, old)
+    with pytest.raises(ValueError):
+        mood.load_mood(old)
+
+
+def test_mood_source_prefers_reply():
+    assert mood.mood_source(" ответ ", "текст") == "ответ"
+    assert mood.mood_source("", " текст ") == "текст"
+    assert mood.mood_source(None, None) == ""

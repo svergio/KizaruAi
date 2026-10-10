@@ -1,0 +1,86 @@
+{
+  "hi": 0.8,
+  "lo": 0.2,
+  "min_frac": 0.8,
+  "categories": {
+    "pos_couplet": {
+      "group": "positive",
+      "n": 50,
+      "mean": 0.6038124489784241,
+      "frac_ok": 0.1,
+      "pass": false
+    },
+    "pos_quatrain": {
+      "group": "positive",
+      "n": 50,
+      "mean": 0.6684051558375359,
+      "frac_ok": 0.38,
+      "pass": false
+    },
+    "neg_shift": {
+      "group": "hard_negative",
+      "n": 50,
+      "mean": 0.5052427171170711,
+      "frac_ok": 0.12,
+      "pass": false
+    },
+    "neg_near_rhyme": {
+      "group": "hard_negative",
+      "n": 50,
+      "mean": 0.578920724093914,
+      "frac_ok": 0.02,
+      "pass": false
+    },
+    "neg_unrhymed": {
+      "group": "hard_negative",
+      "n": 50,
+      "mean": 0.5524332970380783,
+      "frac_ok": 0.08,
+      "pass": false
+    },
+    "trap_repeat_word": {
+      "group": "trap",
+      "n": 50,
+      "mean": 0.6427803757786751,
+      "frac_ok": 0.02,
+      "pass": false
+    },
+    "trap_yeah": {
+      "group": "trap",
+      "n": 50,
+      "mean": 0.8100671100616456,
+      "frac_ok": 0.0,
+      "pass": false
+    },
+    "trap_english": {
+      "group": "trap",
+      "n": 50,
+      "mean": 0.5840369851887226,
+      "frac_ok": 0.2,
+      "pass": false
+    },
+    "trap_tags": {
+      "group": "trap",
+      "n": 50,
+      "mean": 0.7461938714981079,
+      "frac_ok": 0.0,
+      "pass": false
+    },
+    "trap_fragment": {
+      "group": "trap",
+      "n": 50,
+      "mean": 0.40632189840078353,
+      "frac_ok": 0.24,
+      "pass": false
+    },
+    "trap_prompt_copy": {
+      "group": "trap",
+      "n": 50,
+      "mean": 0.7669675648212433,
+      "frac_ok": 0.0,
+      "pass": false
+    }
+  },
+  "gate": "FAIL",
+  "judge": "checkpoints\\jef_rhyme_lora"
+}

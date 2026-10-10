@@ -81,6 +81,7 @@ class _CharLM(nn.Module):
         dropout,
         block_cls,
         embedding_size=None,
+        tie_weights=False,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -89,6 +90,9 @@ class _CharLM(nn.Module):
         self.n_heads = n_heads
         self.block_size = block_size
         self.embedding_size = int(embedding_size or d_model)
+        self.tie_weights = bool(tie_weights)
+        if self.tie_weights and self.embedding_size != d_model:
+            raise ValueError("tie_weights requires embedding_size == d_model")
         self.tok = nn.Embedding(vocab_size, self.embedding_size)
         self.emb_proj = (
             nn.Identity()
@@ -102,6 +106,8 @@ class _CharLM(nn.Module):
         )
         self.ln_f = nn.LayerNorm(d_model)
         self.head = nn.Linear(d_model, vocab_size, bias=False)
+        if self.tie_weights:
+            self.head.weight = self.tok.weight
 
     def forward(self, token_ids):
         if token_ids.dim() != 2:
@@ -125,6 +131,7 @@ class SimpleTransformer(_CharLM):
         block_size=128,
         dropout=0.1,
         embedding_size=None,
+        tie_weights=False,
     ):
         super().__init__(
             vocab_size,
@@ -135,6 +142,7 @@ class SimpleTransformer(_CharLM):
             dropout,
             VaswaniBlock,
             embedding_size=embedding_size,
+            tie_weights=tie_weights,
         )
 
 
@@ -148,6 +156,7 @@ class MiniGPT(_CharLM):
         block_size=128,
         dropout=0.1,
         embedding_size=None,
+        tie_weights=False,
     ):
         super().__init__(
             vocab_size,
@@ -158,4 +167,5 @@ class MiniGPT(_CharLM):
             dropout,
             GPTBlock,
             embedding_size=embedding_size,
+            tie_weights=tie_weights,
         )

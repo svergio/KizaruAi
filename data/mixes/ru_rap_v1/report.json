@@ -1,0 +1,203 @@
+{
+  "mix": "ru_rap_v1",
+  "seed": 1,
+  "recipe_shares": {
+    "ru_rap": 0.85,
+    "ru_poetry": 0.1,
+    "en_rap": 0.05
+  },
+  "requested_total_tokens": "max",
+  "splits": {
+    "val": 0.02,
+    "test": 0.02
+  },
+  "pools": {
+    "ru_rap": {
+      "songs": 34584,
+      "lines": 1801357,
+      "tokens": 16087317,
+      "artists": 293,
+      "by_split": {
+        "train": 15421309,
+        "val": 325959,
+        "test": 340049
+      },
+      "latin_share": 3.34
+    },
+    "ru_other": {
+      "songs": 8877,
+      "lines": 302273,
+      "tokens": 2247579,
+      "artists": 102,
+      "by_split": {
+        "train": 2151582,
+        "val": 47740,
+        "test": 48257
+      },
+      "latin_share": 0.67
+    },
+    "en_rap": {
+      "songs": 41838,
+      "lines": 2765435,
+      "tokens": 32035985,
+      "artists": 270,
+      "by_split": {
+        "train": 30633658,
+        "val": 701358,
+        "test": 700969
+      },
+      "latin_share": 99.98
+    },
+    "other": {
+      "songs": 1304,
+      "lines": 75001,
+      "tokens": 913280,
+      "artists": 23,
+      "by_split": {
+        "train": 872142,
+        "val": 23176,
+        "test": 17962
+      },
+      "latin_share": 99.42
+    },
+    "ru_poetry": {
+      "songs": 8509255,
+      "lines": 103933168,
+      "tokens": 714941717,
+      "artists": 196819,
+      "by_split": {
+        "train": 686343995,
+        "val": 14393615,
+        "test": 14204107
+      },
+      "latin_share": 0.0
+    },
+    "uk_other": {
+      "songs": 680,
+      "lines": 34122,
+      "tokens": 277428,
+      "artists": 12,
+      "by_split": {
+        "train": 265700,
+        "val": 5161,
+        "test": 6567
+      },
+      "latin_share": 7.89
+    },
+    "ru_pop": {
+      "songs": 2532,
+      "lines": 102268,
+      "tokens": 784505,
+      "artists": 35,
+      "by_split": {
+        "train": 750112,
+        "val": 20197,
+        "test": 14196
+      },
+      "latin_share": 2.03
+    },
+    "en_poetry": {
+      "songs": 1912,
+      "lines": 130605,
+      "tokens": 1331077,
+      "artists": 260,
+      "by_split": {
+        "train": 1252356,
+        "val": 60637,
+        "test": 18084
+      },
+      "latin_share": 100.0
+    },
+    "ru_rock": {
+      "songs": 966,
+      "lines": 35440,
+      "tokens": 260192,
+      "artists": 15,
+      "by_split": {
+        "train": 250015,
+        "val": 8099,
+        "test": 2078
+      },
+      "latin_share": 2.58
+    },
+    "kz_uz_other": {
+      "songs": 224,
+      "lines": 11210,
+      "tokens": 76709,
+      "artists": 6,
+      "by_split": {
+        "train": 74013,
+        "val": 1611,
+        "test": 1085
+      },
+      "latin_share": 23.4
+    }
+  },
+  "filters": {
+    "skipped_incomplete": 14,
+    "skipped_broken": 0,
+    "raw_songs": 174130,
+    "drop_short": 3154,
+    "drop_duplicate": 61084,
+    "drop_latin_in_ru": 4193,
+    "drop_cyrillic_in_en": 67,
+    "excluded_to_uk_other": 817,
+    "drop_arabic_script": 144,
+    "excluded_to_ru_pop": 4806,
+    "drop_no_letters": 20,
+    "excluded_to_ru_rock": 2453,
+    "excluded_to_kz_uz_other": 277,
+    "stihi_chunks": 8496704,
+    "kept_songs": 8602172,
+    "stihi_poems": 5151050,
+    "stihi_drop_short": 173997
+  },
+  "skipped_incomplete": 14,
+  "skipped_broken": 0,
+  "max_feasible_train_tokens": 18142716,
+  "limiting_pool": "ru_rap",
+  "caps": {
+    "ru_rap": 18142716,
+    "ru_poetry": 6863439950,
+    "en_rap": 612673160
+  },
+  "total_train_tokens": 18142716,
+  "short": [],
+  "real": {
+    "train": {
+      "songs": 55998,
+      "tokens": 18143151,
+      "share": {
+        "ru_rap": 85.0,
+        "ru_poetry": 10.0,
+        "en_rap": 5.0
+      }
+    },
+    "val": {
+      "songs": 1187,
+      "tokens": 378388,
+      "share": {
+        "ru_rap": 84.99,
+        "ru_poetry": 10.01,
+        "en_rap": 5.0
+      }
+    },
+    "test": {
+      "songs": 1136,
+      "tokens": 378743,
+      "share": {
+        "ru_rap": 84.87,
+        "ru_poetry": 9.98,
+        "en_rap": 5.15
+      }
+    }
+  },
+  "thresholds": {
+    "artist_en_share": 0.7,
+    "song_lat_drop_ru": 0.5,
+    "song_cyr_drop_en": 0.5,
+    "min_song_chars": 40
+  },
+  "elapsed_sec": 288.7,
+  "stihi_cache": "data\\corpus\\poetry\\cache\\stihi_ru_chunks16_v1.jsonl.zst"
+}

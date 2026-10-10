@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block crumbs %}<a href="/">Admin</a> / <span>Воркеры</span>{% endblock %}
+{% block content %}
+<h1 class="page-title">Воркеры</h1>
+<div id="workers-summary" class="muted"></div>
+<section>
+  <h2>Матрица воркер × модель</h2>
+  <div id="chart-workers-matrix" class="chart-box" data-empty="нет данных"></div>
+</section>
+<div class="table-wrap">
+  <table class="data" id="tbl-runtime">
+    <thead><tr>
+      <th>●</th><th>key</th><th>worker_kind</th><th>чекпоинт</th><th>●</th>
+      <th>step</th><th>val_ru_rap</th><th>PID</th><th>RSS</th><th>meta</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+<section>
+  <h2>Прочие .pt</h2>
+  <div class="table-wrap">
+    <table class="data" id="tbl-models-extra">
+      <thead><tr>
+        <th>файл</th><th>токенизатор</th><th>step</th><th>val_ru_rap</th><th>bpc</th><th>дата</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+<div id="chart-models-loss" class="chart-box" data-empty="нет данных"></div>
+{% endblock %}

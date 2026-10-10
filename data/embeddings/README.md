@@ -1,9 +1,9 @@
-# Pretrained word embeddings
+# Предобученные word-эмбеддинги
 
-Local packs for Word LSTM vocab whitelist / embedding init.
+Локальные паки для whitelist словаря word-моделей и инициализации эмбеддингов.
 
-| Dir | HF repo | Notes |
+| Папка | Репозиторий HF | Заметки |
 |-----|---------|-------|
-| `navec_hudlit/` | `BorisTM/natasha_navec_hudlit_v1_12B_500K_300d_100q` | Natasha Navec literary RU, MIT |
+| `navec_hudlit/` | `BorisTM/natasha_navec_hudlit_v1_12B_500K_300d_100q` | Natasha Navec, литературный русский, MIT |
 
-See [docs/research/embeddings-vocab.md](../../docs/research/embeddings-vocab.md).
+Подробно: [docs/research/embeddings-vocab.md](../../docs/research/embeddings-vocab.md).

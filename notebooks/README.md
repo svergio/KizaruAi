@@ -1,56 +1,64 @@
 # Ноутбуки и зонды
 
-Папка для экспериментов и разбора кода, не для production API. Стоп-кадр и анимация в проде — `pic.py` и `kizaru/`. Черновиков бота с `legacy/` здесь нет.
+Папка для экспериментов и разбора кода, не для боевого кода. Боевой код pic — `core/image/`, текстовых моделей — `core/text/`.
 
 | Файл | О чём |
 |------|--------|
-| `text_rnn.ipynb` | Char-level LSTM по слоям (та же идея, что `kizaru/model.py`) |
+| `text_rnn.ipynb` | Char-level LSTM по слоям (код — `core/text/rnn.py`) |
 | `experiments/text_lstm_word.ipynb` | Word-level LSTM: токенизация слов, словарь, зонд-трейн, связка с `lstm-word` |
-| `text_transformer.ipynb` | Causal transformer (post-norm/ReLU), затем mini-gpt (pre-norm/GELU); в коде — `kizaru/lm.py` |
+| `text_transformer.ipynb` | Causal transformer (post-norm/ReLU), затем mini-gpt (pre-norm/GELU); в коде — `core/text/lm.py` |
 | `text_deepseek.ipynb` | MiniDeepSeek: MLA + RMSNorm/SwiGLU (без MoE); код — `core/text/deepseek.py` |
 | `text_bert_gen.ipynb` | BERT MLM + Gibbs decode; код — `core/text/bert_gen.py` |
-| `определенее настроение).ipynb` | RNN mood: часть 1 — pos/neg; часть 2 — 2D-вектор → `kizaru/mood.py` |
+| `определенее настроение).ipynb` | RNN mood: часть 1 — pos/neg; часть 2 — 2D-вектор → `core/mood/model.py` |
 | `исследование пикчи.ipynb` | Сетка sticker/pic, пробные рендеры |
 
-## 1. Текстовые модели (lstm / transformer / gpt / deepseek)
+## 1. Текстовые модели (lstm / transformer / gpt / deepseek / bert-gen)
 
-**lstm** — char-LM из `text_rnn.ipynb` и `kizaru/model.py`. Файл `checkpoints/kizaru.pt`, `arch=rnn`. В slash / CLI имя **lstm**.
+**lstm** — char-LM. Файл `checkpoints/kizaru.pt`, `arch=rnn`, vocab ~2613. В slash / CLI имя **lstm**.
 
-**lstm-word** — тот же `TextRNN`, но токены = слова (`kizaru/tokenize.py`), чекпоинт `checkpoints/kizaru_word.pt`, воркер `worker_lstm_word.py`. Transformer/gpt/deepseek тоже умеют `--level word` на том же словаре.
+**lstm-word** — тот же `TextRNN`, токены = слова, `checkpoints/kizaru_word.pt`, vocab ~99868 (общий word-словарь).
 
-**transformer** — causal LM: post-norm, ReLU. **gpt** — тот же task, pre-norm и GELU. Оба учатся через `train_lm.py` (дефолт около 800 шагов).
+**transformer** / **gpt** / **deepseek** / **bert-gen** — после retrain 2026-10-05 все **word** на том же vocab ~99868, emb 300:
 
-**deepseek** — MLA + RMSNorm + SwiGLU (`text_deepseek.ipynb`, `core/text/deepseek.py`). Чекпоинт `checkpoints/deepseek.pt` — после следующего retrain; пока не учить.
+- transformer — post-norm, ReLU (`core/text/lm.py`)
+- gpt — pre-norm, GELU
+- deepseek — MLA + RMSNorm + SwiGLU (`core/text/deepseek.py`) — чекпоинт **есть**
+- bert-gen — MLM + Gibbs (`core/text/bert_gen.py`) — чекпоинт **есть**
 
-Загруженные чекпоинты сняты со старого корпуса HF/CIS, не с пула Genius. У того прогона у lstm средний loss около 1.53, у transformer/gpt около 2.64–2.66. Текст слабый. `train.py`, `train_lm.py` и `train_mood.py` не запускать, пока датасет не подготовлен (загрузка Genius ещё может идти).
+Учат через `python -m training.train` / `training.train_lm` ([../docs/training.md](../docs/training.md)). Train CE и params: [../docs/methods.md](../docs/methods.md).
 
-Модели в одном репо нужны, чтобы сравнить одну и ту же лирику на RNN, transformer, mini-gpt и DeepSeek-block. Имена совпадают с ботом: `/ai text`, параметр `model`.
+Модели в одном репо — сравнить одну лирику на RNN / transformer / mini-gpt / DeepSeek-block / BERT-gen. Имена = `/ai text model=…`.
 
-## 2. Как эволюционировал pic (line / simple / cli)
+## 2. Как эволюционировал pic (simple / line / render / details)
 
-**simple** — сетка из эмодзи по яркости (одиннадцать ступеней). В боте это текст в чат, 31 колонка.
+**simple** — два глифа dark/light (по умолчанию ⬛/⬜) по яркости ячейки. В боте — текст в чат.
 
-**line** — ячейка smile 2×2 (`A B / C D`); line-символы из измеренных паттернов. Зонды: `research/rank_line_glyphs.py` и `research/rank_shade_glyphs.py` по локальным `data/export/*_probe/` (gitignore) → `kizaru/assets/line_patterns.json`. Контур — shrink-squares по цветным рёбрам (quadtree). В боте `line` тоже текст, 31 колонка.
+**line** — ячейка smile 2×2 (`A B / C D`); classic NN (shade + measured), без spread-gate. Зонды: `probe_unicode_quads` / `pack_pic_dicts_from_probe`; честный MSE — `pic_luma_bench.py`. Контур — shrink-squares. В боте `line` тоже текст.
 
-**cli** (в боте) и `--mode line` в CLI — файл, не чат-сетка: PNG для картинки (`pic_still`), GIF для gif/видео (`pic_video`). Каждый глиф штампуется в тайл 8×8 (`indexes_to_image`, `render_fast`). JSON только выбирает символ. CLI `anim` с `--mode simple` не работает. Флагов `--audio`, `--mp4`, `--gif` у `pic.py` нет.
+**render** (в боте) и CLI `--mode line|render` — файл, не чат-сетка: PNG (`pic_still`) / GIF (`pic_video`). Глиф = тайл 8×8. `render` = OKLab L* + color edges, classic NN; `details` (mode 4) — единственный с soft mid-band gate. CLI `anim` с `--mode simple` не работает.
 
 Подробности — корневой README и `исследование пикчи.ipynb`.
 
 ## 3. GPU
 
-`kizaru/checkpoint.get_device()` → cuda, если `torch.cuda.is_available()`, иначе cpu.
+`core/text/checkpoint.get_device()` → cuda, если `torch.cuda.is_available()`, иначе cpu. Его используют скрипты обучения в `training/`.
 
-`train.py`, `train_lm.py` и `train_mood.py` берут этот device. Сейчас их не запускать: датасет ещё не готов, текущие `.pt` трогать не нужно.
-
-Анимация pic: `kizaru/render_fast.py` — на CUDA батч 4 (`GPU_BATCH`), на CPU по одному кадру.
+Анимация pic: `core/image/anim.py` + `render.py` — CUDA adaptive batch (`pick_gpu_batch`), CPU ProcessPool для `line_mask`, overlap с GPU.
 
 ## Скрипты-зонды
 
-`research/rank_line_glyphs.py` и `research/rank_shade_glyphs.py` ранжируют кандидатов по локальным `data/export/*_probe/`. В приложение уходит только `kizaru/assets/line_patterns.json`.
+`research/rank_line_glyphs.py` и `research/rank_shade_glyphs.py` ранжируют кандидатов по локальным выгрузкам зондов (сейчас удалены, пересоздаются запуском зондов). В приложение уходит только `core/image/assets/line_patterns.json`.
+
+`research/probe_unicode_quads.py` — обход symbol/geometry блоков Unicode, 2×2 яркость, классы flat/soft/line; выход — локальная папка зонда (прошлые выгрузки удалены 2026-10-09). Разбор: [docs/research/unicode-details-glyphs.md](../docs/research/unicode-details-glyphs.md).
+
+`research/pic_luma_bench.py` — цвет в энкодер, Rec.601 gray ref, line/render/details + свип `LEVEL_EPS` / `details_thr`. Отчёт: [docs/research/pic-luma-bench.md](../docs/research/pic-luma-bench.md).
+
+`research/pack_pic_dicts_from_probe.py` — uneven shade ranges + details dedup → `core/image/assets/shade_ramp.json`.
 
 Из корня репозитория:
 
 ```bash
-python notebooks/research/rank_line_glyphs.py
-python notebooks/research/rank_shade_glyphs.py
+python notebooks/research/probe_unicode_quads.py
+python notebooks/research/pack_pic_dicts_from_probe.py
+python notebooks/research/pic_luma_bench.py
 ```

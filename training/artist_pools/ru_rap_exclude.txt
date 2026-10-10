@@ -1,0 +1,94 @@
+# Исключения из пула ru_rap: артисты есть в рэп-списках (00_existing.txt, ru_expand.txt), но это не русский рэп.
+# Это НЕ чёрный список: training/build_mix.py не выкидывает их, а переводит из ru_rap в пул из второй колонки.
+# training/jef_challenge.py не берёт их песни в контрольный набор (там нужен только русский рэп).
+# Формат: slug<TAB>pool, одна запись на строку, # комментарии. Пулы: ru_pop, ru_rock, uk_other, kz_uz_other.
+# Строка без колонки pool означает ru_other.
+# Сравнение slug без регистра и дефисов; отбрасывается только однозначный суффикс дубля (-2, -3), 25-17 остаётся.
+# Загрузчики: from training.jef_challenge import load_ru_rap_exclude, load_ru_rap_exclude_pools
+# Ошибочные артисты Genius (Canis, SOH, Kazhe-, Arash-, ASAP) удалены из кэша и сюда не входят.
+
+# pop, not rap  -> ru_pop
+Anna-Asti	ru_pop
+Artik-and-Asti	ru_pop
+Artik-Asti	ru_pop
+Zivert	ru_pop
+Loboda	ru_pop
+Nyusha	ru_pop
+Hanna	ru_pop
+Elvira-T	ru_pop
+Monatik	ru_pop
+Mary-Gu	ru_pop
+Monetochka	ru_pop
+Klava-Coca	ru_pop
+Klava-Koka	ru_pop
+Atlantida-Project	ru_pop
+Jony	ru_pop
+Andro	ru_pop
+HammAli-and-Navai	ru_pop
+HammAli-Navai	ru_pop
+Rauf-and-Faik	ru_pop
+Rauf-Faik	ru_pop
+Gayazov-Brother	ru_pop
+Gayazov-Brothers	ru_pop
+Max-Korzh	ru_pop
+Tima-Belorusskih	ru_pop
+Doni	ru_pop
+Nuki	ru_pop
+Mona	ru_pop
+Malbek	ru_pop
+Zion	ru_pop
+Zion-Music	ru_pop
+Vladi	ru_pop
+Dolphin	ru_pop
+Gazirovka	ru_pop
+Estradarada	ru_pop
+Ani-Lorak	ru_pop
+Vera-Brezhneva	ru_pop
+Potap	ru_pop
+Potap-and-Nastya	ru_pop
+Nastya-Kamenskikh	ru_pop
+Max-Barskih	ru_pop
+Ivan-Dorn	ru_pop
+Quest-Pistols	ru_pop
+Quest-Pistols-Show	ru_pop
+
+# rock / alt / indie, not rap  -> ru_rock
+Pornofilmy	ru_rock
+Shortparis	ru_rock
+Sirotkin	ru_rock
+Cream-Soda	ru_rock
+IC3PEAK	ru_rock
+Poshlaya-Molly	ru_rock
+Dora	ru_rock
+Maybe-Baby	ru_rock
+Hardkiss	ru_rock
+The-Hardkiss	ru_rock
+ONUKA	ru_rock
+Jamala	ru_rock
+Kazka	ru_rock
+Vremya-i-Steklo	ru_rock
+NK	ru_rock
+
+# not Russian-language: Ukrainian  -> uk_other
+Kalush	uk_other
+Kalush-Orchestra	uk_other
+Skofka	uk_other
+Yarmak	uk_other
+TNMK	uk_other
+Vova-zi-Lvova	uk_other
+Boombox	uk_other
+Jerry-Heil	uk_other
+Wellboy	uk_other
+Alyona-Alyona	uk_other
+YAKTAK	uk_other
+YAKTAK-and-DOVI	uk_other
+PROBass-Hardi	uk_other
+PROBASS	uk_other
+
+# not Russian-language: Kazakh / Uzbek  -> kz_uz_other
+Irina-Kairatovna	kz_uz_other
+Ninety-One	kz_uz_other
+Yenlik	kz_uz_other
+Shoxrux	kz_uz_other
+Jeltoksan	kz_uz_other
+Moldanazar	kz_uz_other

@@ -1,0 +1,21 @@
+# Претрейн: весь ru_rap без повторов + поэзия + en_rap ≤15% + ru_other/pop/rock.
+# Сплит по хешу нормализованного текста общий с ru_v2_finetune.
+# fill_all ru_rap + остальные пулы; en_rap ≤15%.
+# max без лимита ≈735M (≈93% poetry). По умолчанию 200M (≥150M), весь ru_rap сохраняется.
+name: ru_v2_pretrain
+seed: 1
+total_tokens: 200000000
+splits:
+  val: 0.02
+  test: 0.02
+fill_all:
+  - ru_rap
+max_pool_share:
+  en_rap: 0.15
+pools:
+  ru_rap: 40
+  ru_poetry: 35
+  en_rap: 15
+  ru_other: 4
+  ru_pop: 3
+  ru_rock: 3

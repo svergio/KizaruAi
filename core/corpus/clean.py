@@ -58,7 +58,14 @@ _PAREN_LINE_NOISE = re.compile(
     r"Produced|Prod\.|Written|Mixed|Mastered|Recorded)\s+by[^)]+\)\s*$"
 )
 
+_PRODUCED_BY_LINE = re.compile(
+    r"(?i)^\s*(?:Produced|Prod\.|Written|Mixed|Mastered|Recorded)\s+by\b.+$"
+)
+
 _TRAILING_GENIUS_PAREN = re.compile(r"(?i)\s*\((?:Что\?|What\?|Read\s+more)\)\s*")
+_TRAILING_PRODUCED_BY = re.compile(
+    r"(?i)\s*\((?:Produced|Prod\.|Written|Mixed|Mastered|Recorded)\s+by[^)]+\)\s*$"
+)
 
 
 def corpus_looks_like_json_leak(text):
@@ -80,6 +87,7 @@ def _strip_inline_bracket_noise(line):
         line = _BRACKET_INLINE_NOISE.sub("", line)
         line = re.sub(r"\[\d{6,}\]", "", line)
     line = _TRAILING_GENIUS_PAREN.sub("", line)
+    line = _TRAILING_PRODUCED_BY.sub("", line)
     return " ".join(line.split())
 
 
@@ -98,14 +106,24 @@ def strip_corpus_noise(text):
         if _GENIUS_UI_LINE.match(line):
             continue
         low = line.lower()
-        if low in ("embed", "read more") or "you might also like" in low:
+        if low in ("embed", "read more", "lyrics") or "you might also like" in low:
             continue
         if _LYRICS_TITLE_LINE.match(line) and not re.search(r"[\u0400-\u04FF]", line):
             continue
+        if line.strip().lower() == "lyrics":
+            continue
         if _PAREN_LINE_NOISE.match(line):
+            continue
+        if _PRODUCED_BY_LINE.match(line):
             continue
         if re.match(r"(?i)^\s*\((?:Что\?|What\?)\)\s*$", line):
             continue
+        # RU/EN ".... Lyrics" title leftovers (Genius page glue)
+        if re.search(r"(?i)\blyrics\s*$", line) and (
+            "текст песни" in line.lower() or line.lower().endswith(" lyrics")
+        ):
+            if len(line) < 120:
+                continue
         line = _strip_inline_bracket_noise(line)
         if not line:
             continue

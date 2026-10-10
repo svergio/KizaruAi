@@ -74,6 +74,9 @@ def evaluate(
         for idx in idx_input:
             output, hidden = model.step(torch.LongTensor([idx]).to(device), hidden)
         for _ in range(prediction_len):
+            from core.bus.cancel_flag import check_cancelled
+
+            check_cancelled()
             # один символ из текущего hidden; следующий шаг ест уже выбранный токен
             logits = output.reshape(-1).cpu()
             probs = F.softmax(logits / max(temp, 1e-6), dim=-1).numpy()
@@ -113,6 +116,9 @@ def evaluate_words(
         for idx in ids:
             output, hidden = model.step(torch.LongTensor([idx]).to(device), hidden)
         for _ in range(prediction_len):
+            from core.bus.cancel_flag import check_cancelled
+
+            check_cancelled()
             logits = output.reshape(-1).cpu()
             probs = F.softmax(logits / max(temp, 1e-6), dim=-1).numpy()
             top_index = _sample_index(probs, len(token_to_idx), block_ids=block)
@@ -152,6 +158,9 @@ def evaluate_lm(
 
     with torch.no_grad():
         for _ in range(prediction_len):
+            from core.bus.cancel_flag import check_cancelled
+
+            check_cancelled()
             ctx = torch.LongTensor(ids[-block_size:]).view(1, -1).to(device)
             logits = model(ctx)[0, -1]
             probs = F.softmax(logits / max(temp, 1e-6), dim=-1).cpu().numpy()
@@ -188,6 +197,9 @@ def evaluate_lm_words(
 
     with torch.no_grad():
         for _ in range(prediction_len):
+            from core.bus.cancel_flag import check_cancelled
+
+            check_cancelled()
             ctx = torch.LongTensor(ids[-block_size:]).view(1, -1).to(device)
             logits = model(ctx)[0, -1]
             probs = F.softmax(logits / max(temp, 1e-6), dim=-1).cpu().numpy()
@@ -205,3 +217,46 @@ def evaluate_lm_words(
         if idx_to_token.get(int(idx)) != TOKEN_UNK
     ]
     return detokenize(tokens).rstrip()
+
+def evaluate_lm_bpe(
+    model,
+    bpe_tok,
+    start_text='Я',
+    prediction_len=48,
+    temp=0.8,
+    device=None,
+    max_lines=None,
+):
+    from core.text.bpe import decode_ids, encode_ids
+
+    if device is None:
+        device = next(model.parameters()).device
+    model.eval()
+    ids = encode_ids(bpe_tok, start_text)
+    if not ids:
+        bos = bpe_tok.token_to_id('<bos>')
+        ids = [bos if bos is not None else 0]
+    predicted = decode_ids(bpe_tok, ids)
+    start_lines = _completed_lyric_lines(predicted)
+    block_size = model.block_size
+    vocab_size = model.vocab_size
+    unk_id = bpe_tok.token_to_id('<unk>')
+    block = [unk_id] if unk_id is not None else None
+
+    with torch.no_grad():
+        for _ in range(prediction_len):
+            from core.bus.cancel_flag import check_cancelled
+
+            check_cancelled()
+            ctx = torch.LongTensor(ids[-block_size:]).view(1, -1).to(device)
+            logits = model(ctx)[0, -1]
+            probs = F.softmax(logits / max(temp, 1e-6), dim=-1).cpu().numpy()
+            top_index = _sample_index(probs, vocab_size, block_ids=block)
+            ids.append(top_index)
+            predicted = decode_ids(bpe_tok, ids)
+            if (
+                max_lines is not None
+                and _completed_lyric_lines(predicted) - start_lines >= max_lines
+            ):
+                break
+    return predicted.rstrip()

@@ -82,8 +82,8 @@ $workers = @(
     @{ Title = "kizaru-lstm";       Stem = "worker-lstm";       Args = "-m app.workers.lstm checkpoints/kizaru.pt --db $Db" }
     @{ Title = "kizaru-lstm-word";  Stem = "worker-lstm-word";  Args = "-m app.workers.lstm_word checkpoints/kizaru_word.pt --db $Db" }
     @{ Title = "kizaru-transformer"; Stem = "worker-transformer"; Args = "-m app.workers.transformer checkpoints/transformer.pt --db $Db" }
-    @{ Title = "kizaru-gpt";        Stem = "worker-gpt";        Args = "-m app.workers.gpt checkpoints/gpt.pt --db $Db" }
-    @{ Title = "kizaru-deepseek";   Stem = "worker-deepseek";   Args = "-m app.workers.deepseek checkpoints/deepseek.pt --db $Db" }
+    @{ Title = "kizaru-gpt";        Stem = "worker-gpt";        Args = "-m app.workers.gpt checkpoints/gpt_ru_rap_v1-prod.pt --db $Db" }
+    @{ Title = "kizaru-deepseek";   Stem = "worker-deepseek";   Args = "-m app.workers.deepseek checkpoints/deepseek_v2_step14500.pt --db $Db" }
     @{ Title = "kizaru-bert-gen";   Stem = "worker-bert-gen";   Args = "-m app.workers.bert_gen checkpoints/bert_gen.pt --db $Db" }
 )
 
@@ -99,6 +99,8 @@ if (-not $SkipPic) {
     $started += Start-KizaruWindow "kizaru-pic-still" "worker-pic-still" "-m app.workers.still --db $Db"
     $started += Start-KizaruWindow "kizaru-pic-video" "worker-pic-video" "-m app.workers.video --db $Db"
 }
+
+$started += Start-KizaruWindow "kizaru-admin" "admin" "-m app.web --db $Db"
 
 $token = [Environment]::GetEnvironmentVariable("DISCORD_TOKEN", "Process")
 if (-not $SkipDiscord) {

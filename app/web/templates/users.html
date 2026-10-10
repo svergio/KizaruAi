@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block crumbs %}<a href="/">Admin</a> / <span>Аудитория</span>{% endblock %}
+{% block content %}
+<h1>Аудитория</h1>
+<p class="muted" id="users-stamp">Загрузка…</p>
+<label class="filters"><input type="checkbox" id="hide-cli" checked> скрыть cli в сводке</label>
+
+<section>
+  <h2>Сводка</h2>
+  <div class="grid-kpi" id="users-kpi"></div>
+</section>
+
+<section>
+  <h2>Активность и охват</h2>
+  <div id="chart-users-audience" class="chart-box chart-audience" data-empty="нет данных"></div>
+</section>
+
+<section>
+  <h2>Задачи за 7 дней</h2>
+  <div id="chart-users-jobs-spark" class="chart-box" data-empty="нет данных"></div>
+  <p class="audience-caption" id="users-jobs-caption"></p>
+</section>
+
+<section class="users-activity-grid">
+  <div>
+    <h2>Давность last_seen</h2>
+    <div id="users-activity-recency" class="activity-bars" data-empty="нет данных"></div>
+  </div>
+  <div>
+    <h2>Объём задач на запись</h2>
+    <div id="users-activity-jobs" class="activity-bars" data-empty="нет данных"></div>
+  </div>
+</section>
+
+<details class="users-drilldown" id="users-drilldown">
+  <summary>Записи БД (без имён и id)</summary>
+  <p class="muted">Внутренний ключ — только для перехода в карточку; маскированный Discord id не показывается.</p>
+  <div class="table-wrap">
+    <table class="data" id="tbl-users">
+      <thead><tr>
+        <th>ключ</th><th>Всего задач</th><th>Активных</th><th>last_seen</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</details>
+{% endblock %}

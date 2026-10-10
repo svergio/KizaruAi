@@ -1,44 +1,46 @@
-# Methods — text, mood, pic
+# Методы — text, mood, pic
 
-Краткий обзор с живыми цифрами и inline-математикой — [../README.md](../README.md) (секция **Математика / алгоритмы**). Архитектура процессов — [architecture.md](architecture.md). История отбора чекпоинтов (research) — [research/night-contest.md](research/night-contest.md).
+Краткий обзор с живыми цифрами и inline-математикой — [../README.md](../README.md) (секция **Математика / алгоритмы**). Архитектура процессов — [architecture.md](architecture.md). История night-contest (старая эра) — [research/night-contest.md](research/night-contest.md).
 
-Это **next-token language model**, не RL и не RLHF. Корпус режется на символы или слова; модель учится предсказывать следующий токен; на инференсе семплирует продолжение от сида.
+Слоты бота — **next-token language model** (bert-gen — MLM). Экспериментальное RL-дообучение DeepSeek с наградой от классификатора рифмы описано отдельно — [training.md](training.md); в бот оно не подключено. Корпус режется на символы или слова; модель учится предсказывать токен; на инференсе семплирует продолжение от сида.
+
+**Актуально (retrain 2026-10-05):** корпус `LM_STREAM` (пустых строк нет), word vocab **99868**, emb **300**. Char остался только у `lstm`. Deepseek / bert-gen — **есть** на диске, не pending.
+
+Метрика в таблицах ниже — **train `mean_loss` из meta `.pt`**. Held-out test CE (`experiments/bench.py`) на этом vocab ещё не перегоняли.
 
 ## Next-token / CrossEntropy
 
-Для последовательности токенов \(x_1,\ldots,x_T\) модель выдаёт распределение \(p_\theta(x_t\mid x_{<t})\) (в коде часто сдвиг \(x_{t+1}\mid x_{\le t}\)). Лосс на шаге:
+Для последовательности токенов \(x_1,\ldots,x_T\) модель выдаёт \(p_\theta(x_t\mid x_{<t})\). Лосс:
 
 \[
 \mathcal{L} = -\log p_\theta(x_t\mid x_{<t})
 \]
 
-В коде — `torch.nn.CrossEntropyLoss` по логитам словаря. Оптимизатор Adam. Метрика после обучения — **test CE** на замороженном `experiments/shared/test.txt` (`experiments/bench.py`).
+В коде — `torch.nn.CrossEntropyLoss`. Оптимизатор Adam.
 
-Char-модели сравнимы между собой (один vocab ~814). Word — отдельная шкала (vocab ~57k, другой токен).
+Char CE и word CE — **разные шкалы** (vocab 2613 vs 99868). Среди word causal сравнивать только word↔word.
 
 ## LSTM char
 
 Discord: `/ai text model:lstm`.
 
-- Checkpoint: `checkpoints/kizaru.pt` (текущий после обучения).
-- Конфиг: embedding/hidden **768**, **2** слоя LSTM, BPTT 128, seq 512.
-- Vocab: символы (~814). Params ~10.7M.
-- Test CE: **1.335**.
-- Читает слева направо, держит скрытое состояние — удобно для локального ритма строки.
+- Checkpoint: `checkpoints/kizaru.pt` (05.10).
+- Конфиг: embedding/hidden **768**, **2** слоя LSTM.
+- Vocab: символы (**2613**). Params ~**13.5M**.
+- Train CE: **1.616**.
+- Единственный char-слот после retrain — сиды без `<unk>`.
 
 Sketch: \(h_t=\mathrm{LSTM}(e(x_t),h_{t-1})\), \(p=\mathrm{softmax}(W h_t)\).
-
-Прогон / цифры (research): [research/night-contest.md](research/night-contest.md), [../experiments/RESULTS.md](../experiments/RESULTS.md).
 
 ## LSTM word
 
 Discord: `/ai text model:lstm-word`.
 
-- Checkpoint: `checkpoints/kizaru_word.pt` (текущий после обучения).
-- Конфиг: embedding/hidden **512**, **2** слоя, seq 128, bptt 64, `min_freq=5`.
-- Vocab слов ~57k (токенizer `core/text/tokenize.py`). Params ~63M.
-- Test CE: **3.705** (не сравнивать с char CE).
-- OOV → `<unk>`: на сленговых Discord-сидах word сыпется чаще char-моделей.
+- Checkpoint: `checkpoints/kizaru_word.pt` (05.10).
+- Конфиг: emb **300** / hidden **512**, **2** слоя.
+- Vocab слов **99868** (`core/text/tokenize.py`). Params ~**85M**.
+- Train CE: **5.201** (не сравнивать с char).
+- OOV → `<unk>`: на сленговых Discord-сидах сыпется чаще char.
 
 Embeddings / Navec: [research/embeddings-vocab.md](research/embeddings-vocab.md).
 
@@ -46,65 +48,67 @@ Embeddings / Navec: [research/embeddings-vocab.md](research/embeddings-vocab.md)
 
 Discord: `/ai text model:transformer`.
 
-- Checkpoint: `checkpoints/transformer.pt` (текущий после обучения).
-- Конфиг: `d_model=384`, `n_layers=8`, `n_heads=8`, `block_size=384`, 45k steps.
+- Checkpoint: `checkpoints/transformer.pt` (05.10) — **word**.
+- Конфиг: `d_model=384`, `n_layers=8`, `n_heads=8`, `block_size=128`, emb **300**.
 - Post-norm Vaswani-style (`VaswaniBlock` в `core/text/lm.py`: ReLU FFN, LN после residual).
-- Causal self-attention на окне `block_size` — видит контекст целиком, не только через hidden.
-- Test CE: **1.166** (лучший среди текущих char-чекпоинтов).
-- Vocab char ~814, params ~15M.
+- Vocab **99868**, params ~**82.7M**.
+- Train CE: **4.479**.
 
 ## GPT
 
 Discord: `/ai text model:gpt`.
 
-- Checkpoint: `checkpoints/gpt.pt` (текущий после обучения).
-- Та же ёмкость, что у transformer: 384/8/8, block 384, 45k steps.
+- Checkpoint: `checkpoints/gpt.pt` (05.10) — **word**.
+- Та же ёмкость: 384/8/8, block 128, emb 300.
 - Pre-norm GPT-block (`GPTBlock`: GELU FFN, LN перед attn/ffn).
-- Test CE: **1.171**.
-- Тот же next-token setup; разница с transformer — нормализация и активация блока.
+- Train CE: **4.394** (лучший среди текущих causal word по train loss).
+- Params ~**82.7M**.
 
 ## DeepSeek (MiniDeepSeek)
 
-Discord: `/ai text model:deepseek` (после появления чекпоинта).
+Discord: `/ai text model:deepseek`.
 
-- Checkpoint: `checkpoints/deepseek.pt` — **pending** (архитектура готова, полный train на новом корпусе ещё не запускали).
+- Checkpoint: `checkpoints/deepseek.pt` (05.10) — **word**, не pending.
 - Код: `core/text/deepseek.py` (`MiniDeepSeek`).
 - **MLA** (Multi-Head Latent Attention): Q/KV через low-rank latent (`kv_lora_rank` / `q_lora_rank`, дефолт `d_model // 4`), затем expand в heads + causal mask.
-- **RMSNorm + SwiGLU**, pre-norm residual — паттерн блока из open DeepSeek / Llama-подобных, без MoE.
-- Не DeepSeek-V3 MoE: для pet-scale (~15–50M, один GPU) dense FFN.
-- Обучение: `python -m training.train_lm --arch deepseek ...` (тот же loop, что transformer/gpt).
+- **RMSNorm + SwiGLU**, pre-norm residual — без MoE, без RoPE.
+- Конфиг: 384/8/8, block 128, emb 300. Params ~**80.6M**.
+- Train CE: **4.509**.
+- Обучение: `python -m training.train_lm --arch deepseek --level word ...`
 - Ноутбук: [../notebooks/text_deepseek.ipynb](../notebooks/text_deepseek.ipynb).
 
 ## BERT-gen (MLM)
 
-Discord: `/ai text model:bert-gen` (после чекпоинта). Историческая генерация из BERT: Wang & Cho 2019, Gibbs по MLM, не causal GPT.
+Discord: `/ai text model:bert-gen`. Историческая генерация из BERT: Wang & Cho 2019, Gibbs по MLM, не causal GPT.
 
+- Checkpoint: `checkpoints/bert_gen.pt` (05.10) — **word**, не pending.
 - Код: `core/text/bert_gen.py` (`BertMLM`).
 - Двусторонний Transformer (без causal mask), post-norm, GELU.
-- В словарь добавлен `[MASK]` (`mask_id = vocab`).
+- В словарь добавлен `[MASK]` (`mask_id`).
 - Обучение: 15% позиций, 80/10/10, CrossEntropy только на масках (`ignore_index=-100`).
-- Инференс: сид слева, хвост `[MASK]` до `seq_len` (бот: 128), последовательный unmask, затем `n_iters` Gibbs.
-- Train (после корпуса): `python -m training.train_lm --arch bert_gen --level char --d-model 384 --n-layers 8 --n-heads 8 --block-size 256 --steps 45000 --out checkpoints/bert_gen.pt`
+- Инференс: сид слева, хвост `[MASK]`, unmask + `n_iters` Gibbs. Word runtime: окно ≤64 / `block_size`.
+- Конфиг: 384/8/8, block 128, emb 300. Params ~**82.7M**.
+- Train CE (MLM): **6.243**.
 - Ноутбук: [../notebooks/text_bert_gen.ipynb](../notebooks/text_bert_gen.ipynb).
 
 ## Декод / семплирование
 
-На каждом шаге логиты делятся на температуру \(T\) и семплируются: \(p_i=\mathrm{softmax}(z_i/T)\). Ниже \(T\) — ближе к argmax и к повторам, выше — больше редких токенов и битых слов. Стоп — шесть непустых строк либо лимит длины.
+На каждом шаге логиты делятся на температуру \(T\): \(p_i=\mathrm{softmax}(z_i/T)\). Стоп — шесть непустых строк либо лимит длины.
 
-| Модель | temp | Лимит | Почему так |
-|--------|------|-------|------------|
-| lstm | 0.4 | 360 симв. | повтор строки не ловился ни на 0.4, ни на 0.8 |
-| lstm-word | 0.8 | 72 токена | лупа нет, узкое место — OOV |
-| transformer | 0.9 | 360 симв. | колено: луп 13% → 3% при потере 2.8 п.п. реальных слов |
-| gpt | 1.0 | 360 симв. | колено: повтор 50% → 17% |
-| deepseek | 0.9 | 360 симв. | как transformer, до своего чекпоинта |
-| bert-gen | 1.0 | окно 128, 32 Gibbs | не causal: длина фиксирована, качество растёт с числом проходов |
+| Модель | level | temp | length (runtime) |
+|--------|-------|------|------------------|
+| lstm | char | 0.4 | 360 симв. |
+| lstm-word | word | 0.8 | 72 токена |
+| transformer | word | 0.9 | 72 токена |
+| gpt | word | 1.0 | 72 токена |
+| deepseek | word | 0.9 | 72 токена |
+| bert-gen | word | 1.0 | окно ≤64, 32 Gibbs |
 
-Это только дефолты. Пользователь переопределяет их в `/ai text` (`temp`, `lines`, `length`, `iters`) и в `python -m app.cli.generate` теми же флагами. Таблица диапазонов — в [README](../README.md#ai-text). Источник правды — `core/text/params.py`: там же клампы, и подрезка идёт до вызова семплера, так что воркер не может получить `temp=50`.
+У word-LM хендлер (`core/bus/handlers.py`) при пустом `length` форсит 72 токена (у bert — min(64, block)). Источник дефолтов temp/lines — `core/text/params.py`; клампы до семплера.
 
-Жёсткого запрета повтора строки нет специально: один повтор хука — это припев, а не дефект.
+Жёсткого запрета повтора строки нет: один повтор хука — припев.
 
-Замеры и кривая «луп против мусора»: [research/generation-notes.md](research/generation-notes.md).
+Замеры лупов на char-эре: [research/generation-notes.md](research/generation-notes.md) (до вечернего word-retrain — цифры temp→луп устарели для attention-слотов).
 
 ## Mood
 
@@ -127,30 +131,27 @@ Discord: `/ai mood`.
 
 Discord: `/ai pic`. Не нейросеть — яркость кадра → глифы (`core/image/ascii.py`). Демо анимации: [Bad Apple на YouTube](https://youtu.be/yNeDeC8j7tY).
 
-| Mode | Discord | Суть |
-|------|---------|------|
-| **line** | текст, 31 колонка | глифы из `line_patterns.json` (паттерны 2×2 яркости) |
-| **simple** | текст, 31 колонка | 11-тоновая рампа блочных символов |
-| **cli** | файл PNG/GIF | тайл 8×8; `scale` / `cells` |
+| Mode | Discord / CLI | Суть |
+|------|---------------|------|
+| **simple** | текст; `cli`/PNG | ровно 2 глифа `dark`/`light` (⬛/⬜), квант 0\|1 |
+| **line** | текст; `cli`/PNG | classic NN shade+measured, Rec.601; shade-рампа из `shade_ramp.json` |
+| **render** | PNG/GIF | classic NN + OKLab L* + color edges |
+| **details** | текст; `cli`/PNG | soft `DETAILS_PATTERNS` mid-band (отдельный режим) |
 
-CLI ставит ту же очередь: `python -m app.cli.image`.
+CLI: `python -m app.cli.image still|anim --mode simple|line|render|details`.  
+Discord: те же 4 режима + флаг `cli` → ответ файлом.
 
-### Алгоритм и размер (`cli` / `--mode line`)
+`line`/`render` — classic NN без hard `LINE_THR` gate. Soft details только в mode `details`. Регрессия: [research/pic-quality-regression.md](research/pic-quality-regression.md).
+
+### Алгоритм и размер (`line` / `render` / `details`)
 
 Константы: `OUTPUT_SMILE_PX = 8`, `CLI_DEFAULT_SCALE = 2`, `CLI_DEFAULT_CELLS = 320`.
 
-Пайплайн кратко:
+1. Tone: `line`/`details` = Rec.601; `render` = OKLab L* (`render_line_opts`).
+2. Mask: `line`/`details` = luma quadtree; `render` = `structure_field` (color edges).
+3. Сетка `cells`; окно `(2×scale)²` → глиф; в файле тайл 8×8.
 
-1. Кадр → luma + stretch контраста.
-2. Сетка `cells` колонок; высота по aspect.
-3. Ячейка читает окно `(2 × scale) × (2 × scale)` px (четыре квадранта `scale × scale`), выбирает ближайший глиф по паттерну 2×2.
-4. В PNG/GIF глиф рисуется тайлом 8×8.
-
-Две величины: ширина выхода `W_out = cells × 8`; «сытая» ширина источника без растягивания `W_need = cells × 2 × scale`.
-
-`upscale` (API, по умолчанию `True`): при `W_src < W_need` либо nearest-up (сетка `cells` сохраняется), либо при `False` — сжатие `cols` до `W_src // (2 × scale)`. Discord и CLI-воркеры всегда передают `upscale=True`; отдельного флага в slash/CLI нет.
-
-Правило: `cells × 2 × scale ≈ ширина кадра`. Для **~1800 px** без upscale: **`scale=3`, `cells=300`** (`W_need=1800`). Дефолт `cells=320` при `scale=3` даёт `W_need=1920` — лёгкий nearest-up. Discord `cli` режет файлы > 8 MB — при `cells=320` часто снижай `cells`.
+`W_out = cells × 8`, `W_need = cells × 2 × scale`. Discord `render` режет файлы > 8 MB — снижай `cells`.
 
 | Ширина ≈ | scale | cells | W_need | W_out |
 |----------|-------|-------|--------|-------|
@@ -160,16 +161,17 @@ CLI ставит ту же очередь: `python -m app.cli.image`.
 | 1800 | 3 | 320 | 1920 | 2560 |
 | 1920 | 2 | 320 | 1280 | 2560 |
 
-Практический обзор тех же правил — в [README](../README.md#pic-scale-cells-upscale).
+Практический обзор тех же правил — в [README](../README.md#render-scale-cells-upscale).
 
-## Сводка CE (после обучения / текущие чекпоинты)
+## Сводка train CE (чекпоинты 2026-10-05)
 
-| Слот | test CE | Checkpoint |
-|------|---------|------------|
-| lstm char | 1.335 | `checkpoints/kizaru.pt` |
-| lstm-word | 3.705 | `checkpoints/kizaru_word.pt` |
-| transformer | 1.166 | `checkpoints/transformer.pt` |
-| gpt | 1.171 | `checkpoints/gpt.pt` |
-| deepseek | — (pending) | `checkpoints/deepseek.pt` |
+| Слот | level | Train CE | Params | Checkpoint |
+|------|-------|----------|--------|------------|
+| lstm char | char | **1.616** | ~13.5M | `checkpoints/kizaru.pt` |
+| lstm-word | word | **5.201** | ~85M | `checkpoints/kizaru_word.pt` |
+| transformer | word | **4.479** | ~82.7M | `checkpoints/transformer.pt` |
+| gpt | word | **4.394** | ~82.7M | `checkpoints/gpt.pt` |
+| deepseek | word | **4.509** | ~80.6M | `checkpoints/deepseek.pt` |
+| bert-gen | word | **6.243** (MLM) | ~82.7M | `checkpoints/bert_gen.pt` |
 
-История team-сравнений (research): [research/night-contest.md](research/night-contest.md), [../experiments/RESULTS.md](../experiments/RESULTS.md). RPS / замеры: [services.md](services.md).
+История team-сравнений (char/~57k эра): [research/night-contest.md](research/night-contest.md), [../experiments/RESULTS.md](../experiments/RESULTS.md). RPS: [services.md](services.md).

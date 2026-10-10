@@ -1,0 +1,12 @@
+# Микс для SFT: русский рэп + немного русской поэзии (рифма/размер) + чуть англ. рэпа (англ. вставки).
+# Доли — по токенам train. total_tokens: число или max (максимум без повторов данных).
+name: ru_rap_v1
+seed: 1
+total_tokens: max
+splits:
+  val: 0.02
+  test: 0.02
+pools:
+  ru_rap: 85
+  ru_poetry: 10
+  en_rap: 5

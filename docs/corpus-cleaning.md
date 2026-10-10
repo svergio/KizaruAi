@@ -1,69 +1,71 @@
-# Corpus cleaning (Genius → LM)
+# Очистка корпуса (Genius → LM)
 
-Training text is built in `training/prepare_data.py` from local `data/corpus/genius_<slug>.json` caches (orchestrator or manual fetch). Those paths are **not shipped in git** — they appear after you download or build corpus. Each song is cleaned before merge into `data/corpus/kizaru_lyrics.txt` (also local-only).
+Тренировочный текст собирается в `training/prepare_data.py` из локальных кэшей `data/corpus/genius_<slug>.json` (оркестратор или ручная загрузка). Эти файлы **не в git** — появляются после скачивания/сборки. Каждая песня чистится до склейки в `data/corpus/kizaru_lyrics.txt` (тоже только локально).
 
-## Pipeline
+## Пайплайн
 
-| Step | Module | What it does |
+| Шаг | Модуль | Что делает |
 |------|--------|----------------|
-| 1 | `core/corpus/genius.py` | HTML → plain; `<br>` becomes `\n`. Genius often uses double breaks, so raw lyrics are **line + blank line + line**. `strip_page_tail` cuts leaked page JSON when the parser overshoots. |
-| 2 | `strip_genius_annotations` (`core/corpus/lyrics.py`) | Drops full-line and leading bracket/paren **section labels** (RU/EN), `[Текст песни «…»]`, contributor/embed UI lines, and similar. |
-| 3 | `strip_corpus_noise` (`core/corpus/clean.py`) | **Before `LM_STREAM`:** drops whole songs that still look like Genius page JSON; removes UI/meta lines; strips inline `[?]`, long numeric footnotes, producer credits in brackets, `(Что?)` / `(Read more)` tails, etc. |
-| 4 | `_normalize_lyrics_chars` (`core/corpus/lyrics.py`) | Thin spaces, curly quotes, rare symbols. |
-| 5 | `normalize_song_body` (`core/corpus/clean.py`) | **LM default:** one file line per verse line. Blank lines inside a song are dropped, the newline between bars stays. Joining bars with a space is opt-in (`intra_line_sep=" "`). |
-| 6 | `join_songs` (`core/corpus/clean.py`) | Songs separated by a **single** `\n` (not `\n\n`). |
+| 1 | `core/corpus/genius.py` | HTML → текст; `<br>` → `\n`. Genius часто даёт двойные переносы: **строка + пустая + строка**. `strip_page_tail` обрезает утечку page JSON, если парсер залез дальше текста. |
+| 2 | `strip_genius_annotations` (`core/corpus/lyrics.py`) | Убирает целые строки и ведущие метки секций в скобках (RU/EN), `[Текст песни «…»]`, строки contributors/embed и похожий UI. |
+| 3 | `strip_corpus_noise` (`core/corpus/clean.py`) | **До `LM_STREAM`:** выкидывает песни, похожие на Genius page JSON; UI/meta-строки; инлайн `[?]`, длинные числовые сноски, продюсерские кредиты в скобках, хвосты `(Что?)` / `(Read more)` и т.п. |
+| 4 | `_normalize_lyrics_chars` (`core/corpus/lyrics.py`) | Тонкие пробелы, «умные» кавычки, редкие символы. |
+| 5 | `normalize_song_body` (`core/corpus/clean.py`) | **Дефолт LM:** одна строка файла = одна строка куплета. Пустые строки внутри песни выкидываются, перенос между барами остаётся. Склейка баров пробелом — опционально (`intra_line_sep=" "`). |
+| 6 | `join_songs` (`core/corpus/clean.py`) | Песни разделяются **одним** `\n` (не `\n\n`). |
 
-`_normalize_lyrics_chars` collapses spaces **inside** a line only. A rare symbol used to fall through `" ".join(text.split())`, which also ate newlines and glued a whole song into one line. That path now keeps `\n`. The bot counts a verse by those newlines, so a space-joined song cannot produce six lines.
+`_normalize_lyrics_chars` схлопывает пробелы **только внутри** строки. Раньше редкий символ мог уйти в `" ".join(text.split())` и съесть все `\n`, склеив песню в одну линию. Сейчас `\n` сохраняются. Бот считает куплет по этим переносам — склеенная пробелом песня не даст шесть строк.
 
-Optional `NewlineMode.PARAGRAPH` keeps up to two consecutive newlines inside a song (stanza-style); training uses `LM_STREAM`.
+Опциональный `NewlineMode.PARAGRAPH` оставляет до двух подряд `\n` внутри песни (как строфы); обучение использует `LM_STREAM`.
 
-Dry run of the current pipeline on 25 cached artists (3 728 songs), nothing written to `kizaru_lyrics.txt`:
+Сухой прогон пайплайна на 25 кэшированных артистах (3 728 песен), без записи в `kizaru_lyrics.txt`:
 
-| | Raw cache | After `prepare_corpus_text` |
+| | Сырой кэш | После `prepare_corpus_text` |
 |--|-----------|------------------------------|
-| Characters kept | 8.5M | 86% |
-| Blank lines | 54% | 1.7% (one trailing newline per song) |
-| Lines containing Genius JSON keys | 53 | 0 |
-| Mean line length | — | 34 characters |
+| Символов сохранено | 8.5M | 86% |
+| Пустых строк | 54% | 1.7% (хвостовой `\n` на песню) |
+| Строк с Genius JSON-ключами | 53 | 0 |
+| Средняя длина строки | — | 34 символа |
 
-The live `kizaru_lyrics.txt` is still the older build (blank lines on half the file, page JSON ~11% of characters). Rebuild only after the 300-artist download finishes.
+Живой `kizaru_lyrics.txt` после `genius-cache` (2026-10-06): ~1.96M строк, пустых 0, JSON/секции/`Produced by`/`Lyrics` — 0. Если файл старый (половина пустых строк, page JSON) — пересобери из кэша (ниже).
 
-## Noise categories (audit, 25 random `genius_*.json` slugs)
+## Категории шума (аудит, 25 случайных `genius_*.json`)
 
-Counts are **songs hit at least once** in the sample (~3k+ tracks). “After” = `prepare_corpus_text(..., genius=True)` with current code.
+Счётчики — **песни, где паттерн встретился хотя бы раз** (~3k+ треков). «После» = `prepare_corpus_text(..., genius=True)` текущим кодом.
 
-| Rank | Pattern | Raw (approx.) | After pipeline | Handled by |
+| # | Паттерн | Сырьё (примерно) | После пайплайна | Кто чистит |
 |------|---------|---------------|----------------|------------|
-| 1 | Bracket section tags (`[Куплет]`, `[Verse]`, `[Припев]`, …) | ~3.3k | ~0 | `strip_genius_annotations` |
-| 2 | `[Текст песни «Title»]` title lines | ~3.0k | ~0 | section hint `текст песни` |
-| 3 | Short parentheticals in lyrics (ad-libs) | ~2.5k | most kept | intentional (not stripped) |
-| 4 | RU sections missing from old hint (`[Рефрен]`, `[Хук]`, `[Интерлюдия:]`, `[Переход:]`, `[Часть I]`) | ~400+ | ~0 | expanded `_is_genius_section_label` |
-| 5 | Genius unknown token `[?]` / `[..]` | ~240 | inline removed | `strip_corpus_noise` |
-| 6 | `[Label: Artist]` colon headers | ~3.2k raw lines | ~0 when label is section | `_section_label_core` + hints |
-| 7 | Page JSON leak (`hotSongsPreview`, `lyricsPlaceholderReason`, …) | ~94 songs in sample | empty song | `corpus_looks_like_json_leak` |
-| 8 | Contributors / Translations / English glue lines | rare in RU cache | ~0 | `_GENIUS_NOISE_LINE` + `strip_corpus_noise` |
-| 9 | Embed / Read more / You might also like | rare | ~0 | noise line matchers |
-| 10 | Producer credits `[Produced by …]` | rare | ~0 | section hint + inline bracket strip |
+| 1 | Теги секций `[Куплет]`, `[Verse]`, `[Припев]`, … | ~3.3k | ~0 | `strip_genius_annotations` |
+| 2 | `[Текст песни «Title»]` | ~3.0k | ~0 | хинт `текст песни` |
+| 3 | Короткие скобки ad-lib в тексте | ~2.5k | в основном остаются | намеренно |
+| 4 | RU-секции без старого хинта (`[Рефрен]`, `[Хук]`, …) | ~400+ | ~0 | расширенный `_is_genius_section_label` |
+| 5 | Genius `[?]` / `[..]` | ~240 | инлайн снят | `strip_corpus_noise` |
+| 6 | Заголовки `[Label: Artist]` | ~3.2k строк | ~0 если label = секция | `_section_label_core` + хинты |
+| 7 | Утечка page JSON (`hotSongsPreview`, …) | ~94 песни в сэмпле | пустая песня | `corpus_looks_like_json_leak` |
+| 8 | Contributors / Translations / English glue | редко в RU-кэше | ~0 | `_GENIUS_NOISE_LINE` + `strip_corpus_noise` |
+| 9 | Embed / Read more / You might also like | редко | ~0 | матчеры noise-строк |
+| 10 | `[Produced by …]` | редко | ~0 | хинт секции + инлайн-скобки |
 
-**Note:** Ad-lib parentheses like `(Эй)`, `(Jillzay, …)`, `(Что?)` **mid-line** in real bars are kept when they are part of a lyric line; standalone `(Что?)` lines and trailing `(Что?)` on a line are removed.
+**Заметка:** ad-lib вроде `(Эй)`, `(Jillzay, …)` **внутри** реальной строки остаются; отдельно стоящие `(Что?)` и хвостовой `(Что?)` снимаются.
 
-**Existing `kizaru_lyrics.txt`:** built with an older cleaner — lines starting with `[` (e.g. `[Рефрен]`, `[Часть I]`, `[реклама N]`) remain until you rebuild from cache (see below). Inline `[?]` in merged corpus is common.
+## Когда пересобирать
 
-## When to re-run prepare
-
-- After Genius pool download finishes (orchestrator writes cache only until all slugs are `"complete": true`, then merges corpus).
-- After changing `core/corpus/clean.py` or annotation stripping — refresh from cache **without network**:
+- После окончания загрузки Genius (оркестратор пишет кэш, пока все slug не `"complete": true`, потом мержит корпус).
+- После правок `core/corpus/clean.py` или снятия аннотаций — обновить из кэша **без сети**:
 
 ```bash
 python -m training.prepare_data --source genius-cache
 ```
 
-Do **not** retrain until you intentionally rebuild checkpoints on the new `kizaru_lyrics.txt`.
+**Не** переобучай чекпоинты, пока сознательно не решишь учить на новом `kizaru_lyrics.txt`.
 
-## After 300-artist orchestrator
+## После полной загрузки пула
 
-1. Wait for `genius_orchestrator` to finish (or confirm all slugs in `GENIUS_ARTISTS` have `genius_<slug>.json` with `"complete": true`).
-2. If the orchestrator already wrote `kizaru_lyrics.txt`, run `genius-cache` anyway to apply the latest cleaning rules to the full cache.
-3. Optionally run `python -m training.prep_embedding_vocab` if word-level training should match the new corpus (only when you plan training).
+1. Дождись `genius_orchestrator` (или убедись, что у всех slug из пула `training/artist_pools/*.txt` есть `genius_<slug>.json` с `"complete": true`).
+2. Даже если оркестратор уже записал `kizaru_lyrics.txt`, прогони `genius-cache`, чтобы применить свежие правила очистки ко всему кэшу.
+3. Опционально: `python -m training.prep_embedding_vocab`, если word-обучение должно совпасть с новым корпусом (только перед трейном).
 
-See also [runbook.md](runbook.md) (corpus / Genius section).
+## Проверка
+
+Шум до/после очистки, оставшиеся `[теги]`, рифму и дубли кэша считает `python -m training.check_dataset all` — см. [training.md](training.md#проверка-корпуса).
+
+См. также [runbook.md](runbook.md) (раздел корпус / Genius).

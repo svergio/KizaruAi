@@ -1,128 +1,88 @@
-import unittest
-
+"""core/corpus/clean.py: чистка шума Genius, тегов [..] и нормализация переводов строк."""
 from core.corpus.clean import (
     NewlineMode,
+    collapse_consecutive_newlines,
     corpus_looks_like_json_leak,
     join_songs,
+    normalize_corpus_text,
     normalize_song_body,
     strip_corpus_noise,
-)
-from core.corpus.lyrics import prepare_corpus_text
-
-GENIUS_LIKE = """
-[Текст песни «Test»]
-
-
-[Куплет 1: Artist]
-
-Первая строка
-
-Вторая строка
-
-
-[Припев]
-
-Хук один
-
-Хук два
-"""
-
-NOISE_SAMPLE = """
-144 ContributorsTranslationsEnglish
-[Текст песни «Demo»]
-[Рефрен: Guest]
-Рефрен текст
-[Часть II]
-Следующая часть
-[?]
-Не купил я [?] корни, ты знаешь
-[Produced by Metro]
-Embed
-Read More
-"""
-
-JSON_LEAK = (
-    '","tag":"root"},"lyricsPlaceholderReason":"unreleased",'
-    '"hotSongsPreview":[{"url":"https://genius.com/x"}]'
+    strip_empty_lines,
+    trim_lines,
 )
 
 
-class CorpusCleanTests(unittest.TestCase):
-    def test_lm_stream_collapses_stanza_gaps(self):
-        out = prepare_corpus_text(GENIUS_LIKE, genius=True)
-        self.assertNotIn("\n\n", out)
-        self.assertIn("Первая строка", out)
-        self.assertIn("Вторая строка", out)
-        self.assertIn("Хук один", out)
-        self.assertNotRegex(out, r"\[Куплет|\[Припев")
-
-    def test_normalize_song_body_keeps_one_line_per_line(self):
-        body = "line one\n\nline two\n\n"
-        out = normalize_song_body(body, mode=NewlineMode.LM_STREAM)
-        self.assertEqual(out, "line one\nline two")
-
-    def test_lm_stream_preserves_line_count(self):
-        body = "раз\n\nдва\n\n\nтри\n"
-        out = normalize_song_body(body, mode=NewlineMode.LM_STREAM)
-        self.assertEqual(out.split("\n"), ["раз", "два", "три"])
-        self.assertNotIn("\n\n", out)
-
-    def test_rare_symbol_does_not_glue_lines(self):
-        text = "первая строка ★\nвторая строка\nтретья строка"
-        out = prepare_corpus_text(text)
-        self.assertEqual(
-            [line.strip() for line in out.splitlines() if line.strip()],
-            ["первая строка", "вторая строка", "третья строка"],
-        )
-        self.assertNotIn("★", out)
-
-    def test_space_join_still_available_explicitly(self):
-        body = "line one\n\nline two"
-        out = normalize_song_body(body, mode=NewlineMode.LM_STREAM, intra_line_sep=" ")
-        self.assertEqual(out, "line one line two")
-
-    def test_join_songs_single_newline(self):
-        out = join_songs(["song a", "song b"], separator="\n")
-        self.assertEqual(out, "song a\nsong b\n")
-
-    def test_prepare_corpus_strips_noise_and_placeholders(self):
-        out = prepare_corpus_text(NOISE_SAMPLE, genius=True)
-        self.assertNotIn("Contributors", out)
-        self.assertNotIn("Embed", out)
-        self.assertNotIn("Produced", out)
-        self.assertNotIn("[Рефрен", out)
-        self.assertNotIn("[Часть", out)
-        self.assertNotIn("[?]", out)
-        self.assertIn("Рефрен текст", out)
-        self.assertIn("корни", out)
-
-    def test_strip_corpus_noise_jsonish_line(self):
-        out = strip_corpus_noise('{"view_song": true}\nReal line')
-        self.assertIn("Real line", out)
-        self.assertNotIn("view_song", out)
-
-    def test_prepare_drops_json_leak_song(self):
-        out = prepare_corpus_text(JSON_LEAK, genius=True)
-        self.assertEqual(out, "")
-
-    def test_json_leak_detector(self):
-        self.assertTrue(corpus_looks_like_json_leak(JSON_LEAK))
-        self.assertFalse(corpus_looks_like_json_leak("normal line\nanother line"))
-
-    def test_refrain_and_interlude_labels_removed(self):
-        raw = """
-[Интерлюдия: MC]
-Речь в интерлюдии
-[Переход: DJ]
-Бит крутится
-[Хук]
-Мы на районе
-"""
-        out = prepare_corpus_text(raw, genius=True)
-        self.assertNotRegex(out, r"\[Интерлюд|\[Переход|\[Хук")
-        self.assertIn("Речь в интерлюдии", out)
-        self.assertIn("Мы на районе", out)
+def test_json_leak_detected_and_dropped():
+    text = '{"tag": "root", "children": [{"x": 1}]} ' + "мусор " * 20
+    assert corpus_looks_like_json_leak(text)
+    assert strip_corpus_noise(text) == ""
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_short_or_empty_text_is_not_json_leak():
+    assert not corpus_looks_like_json_leak("")
+    assert not corpus_looks_like_json_leak('"tag"')
+
+
+def test_genius_ui_lines_removed():
+    raw = "12 Contributors\nЯ иду по району\nYou might also like\nEmbed\nRead More\nНочь тиха"
+    assert strip_corpus_noise(raw) == "Я иду по району\nНочь тиха"
+
+
+def test_produced_by_lines_removed():
+    raw = "Produced by Slava Marlow\n(Produced by Kizaru)\nЯ на месте"
+    assert strip_corpus_noise(raw) == "Я на месте"
+
+
+def test_inline_bracket_noise_removed():
+    raw = "Я тут [?] стою [1234567]\nПесня [Remix]\nДальше [...] едем"
+    assert strip_corpus_noise(raw) == "Я тут стою\nПесня\nДальше едем"
+
+
+def test_english_title_lyrics_line_removed():
+    raw = "Money Talks Lyrics\nДеньги говорят"
+    assert strip_corpus_noise(raw) == "Деньги говорят"
+
+
+def test_jsonish_line_removed():
+    raw = 'Строка песни\n"foo": "bar"\nЕщё строка'
+    assert strip_corpus_noise(raw) == "Строка песни\nЕщё строка"
+
+
+def test_strip_noise_keeps_plain_lyrics():
+    raw = "Кайф и огонь\nНочь, город, дым!"
+    assert strip_corpus_noise(raw) == raw
+
+
+def test_strip_noise_empty_input():
+    assert strip_corpus_noise("") == ""
+    assert strip_corpus_noise("   \n  ") == ""
+
+
+def test_collapse_consecutive_newlines():
+    assert collapse_consecutive_newlines("a\n\n\n\nb", 2) == "a\n\nb"
+    assert collapse_consecutive_newlines("a\r\n\r\nb", 1) == "a\nb"
+    assert collapse_consecutive_newlines("a\n\n\nb", 0) == "a\nb"
+
+
+def test_strip_empty_and_trim_lines():
+    assert strip_empty_lines("a\n\n  \nb") == "a\nb"
+    assert trim_lines("  a  \n b ") == "a\nb"
+
+
+def test_normalize_song_body_modes():
+    text = "  первая \r\n\r\n вторая  \n\n\nтретья "
+    assert normalize_song_body(text) == "первая\nвторая\nтретья"
+    assert normalize_song_body(text, intra_line_sep=" ") == "первая вторая третья"
+    assert normalize_song_body(text, mode=NewlineMode.PARAGRAPH) == "первая\nвторая\nтретья"
+    assert normalize_song_body("   \n ") == ""
+
+
+def test_normalize_corpus_text_splits_songs_on_blank_lines():
+    text = "песня один\nстрока два\n\n\nпесня два\n"
+    assert normalize_corpus_text(text) == "песня один\nстрока два\nпесня два\n"
+
+
+def test_join_songs():
+    assert join_songs([" a ", "", None, "b"]) == "a\nb\n"
+    assert join_songs([]) == ""
+    assert join_songs(["x"], separator="\n\n") == "x\n"

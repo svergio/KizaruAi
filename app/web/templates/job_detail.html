@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block crumbs %}<a href="/">Admin</a> / <a href="/jobs">Задачи</a> / <span>#{{ job_id }}</span>{% endblock %}
+{% block content %}
+<h1>Задача #{{ job_id }}</h1>
+<div id="job-detail" data-job-id="{{ job_id }}">Загрузка…</div>
+{% endblock %}
